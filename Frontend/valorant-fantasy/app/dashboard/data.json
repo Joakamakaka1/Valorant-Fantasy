@@ -1,0 +1,47 @@
+[
+  {
+    "id": "1",
+    "name": "Aspas",
+    "org": "Leviatán",
+    "role": "Duelist",
+    "points": 24,
+    "price": "€12.5M",
+    "ownership": "45.2%"
+  },
+  {
+    "id": "2",
+    "name": "Derke",
+    "org": "FNATIC",
+    "role": "Duelist",
+    "points": 18,
+    "price": "€11.8M",
+    "ownership": "32.1%"
+  },
+  {
+    "id": "3",
+    "name": "Chronicle",
+    "org": "FNATIC",
+    "role": "Initiator",
+    "points": 21,
+    "price": "€10.5M",
+    "ownership": "28.5%"
+  },
+  {
+    "id": "4",
+    "name": "Sayf",
+    "org": "Vitality",
+    "role": "Duelist",
+    "points": 29,
+    "price": "€9.2M",
+    "ownership": "15.7%"
+  },
+  {
+    "id": "5",
+    "name": "Boo",
+    "org": "Team Heretics",
+    "role": "Initiator",
+    "points": 15,
+    "price": "€8.5M",
+    "ownership": "12.3%"
+  }
+]
