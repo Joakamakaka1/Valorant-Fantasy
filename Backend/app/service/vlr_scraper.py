@@ -4,11 +4,99 @@ from datetime import datetime, timedelta
 import re
 import logging
 import asyncio
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Callable, TypeVar
+from functools import wraps
 
 logger = logging.getLogger(__name__)
 
+T = TypeVar('T')
+
+def async_retry_with_backoff(
+    max_retries: int = 3,
+    base_delay: float = 1.0,
+    max_delay: float = 30.0,
+    exponential_base: float = 2.0,
+    exceptions: tuple = (httpx.HTTPError, httpx.TimeoutException, httpx.ConnectError)
+):
+    """
+    Decorador para reintentos con Exponential Backoff en funciones async.
+    
+    Args:
+        max_retries: Número máximo de reintentos
+        base_delay: Delay inicial en segundos
+        max_delay: Delay máximo en segundos
+        exponential_base: Base para el cálculo exponencial
+        exceptions: Tupla de excepciones que disparan reintento
+    """
+    def decorator(func: Callable[..., T]) -> Callable[..., T]:
+        @wraps(func)
+        async def wrapper(*args, **kwargs) -> T:
+            last_exception = None
+            
+            for attempt in range(max_retries + 1):
+                try:
+                    return await func(*args, **kwargs)
+                except exceptions as e:
+                    last_exception = e
+                    
+                    if attempt == max_retries:
+                        logger.error(f"Max retries ({max_retries}) reached for {func.__name__}: {e}")
+                        raise
+                    
+                    # Calcular delay con exponential backoff
+                    delay = min(base_delay * (exponential_base ** attempt), max_delay)
+                    logger.warning(
+                        f"Attempt {attempt + 1}/{max_retries} failed for {func.__name__}: {e}. "
+                        f"Retrying in {delay:.2f}s..."
+                    )
+                    await asyncio.sleep(delay)
+            
+            # Esto no debería alcanzarse, pero por seguridad
+            raise last_exception
+        
+        return wrapper
+    return decorator
+
+
 class VLRScraper:
+    """
+    Scraper para VLR.gg con reintentos automáticos y manejo robusto de errores.
+    
+    NOTA IMPORTANTE - Transaccionalidad Atómica:
+    ============================================
+    Este scraper NO maneja transacciones de base de datos directamente.
+    La transaccionalidad atómica debe implementarse en el servicio que use este scraper.
+    
+    Ejemplo de uso con transaccionalidad:
+    
+    ```python
+    async def sync_match(self, match_url: str):
+        scraper = VLRScraper()
+        
+        # Opción 1: Usar async with db.begin() para transacción automática
+        async with self.db.begin():
+            match_data = await scraper.scrape_match_details(match_url)
+            if not match_data:
+                raise Exception("Failed to scrape match")
+            
+            # Crear/actualizar todos los registros
+            await self._save_teams(match_data['teams'])
+            await self._save_players(match_data['players'])
+            await self._save_match(match_data)
+            # Si algo falla aquí, toda la transacción se revierte automáticamente
+        
+        # Opción 2: Manejo manual con rollback
+        try:
+            match_data = await scraper.scrape_match_details(match_url)
+            await self._save_all_data(match_data)
+            await self.db.commit()
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"Transaction rolled back: {e}")
+            raise
+    ```
+    """
+    
     def __init__(self):
         self.vlr_base_url = "https://www.vlr.gg"
         self.headers = {
@@ -16,15 +104,40 @@ class VLRScraper:
             "Accept-Language": "en-US,en;q=0.9"
         }
 
+    @async_retry_with_backoff(max_retries=3, base_delay=2.0, max_delay=30.0)
+    async def _fetch_with_retry(self, url: str) -> str:
+        """
+        Realiza una petición HTTP con reintentos automáticos.
+        
+        Args:
+            url: URL completa a consultar
+            
+        Returns:
+            Contenido HTML de la respuesta
+            
+        Raises:
+            httpx.HTTPError: Si falla después de todos los reintentos
+        """
+        async with httpx.AsyncClient(headers=self.headers, timeout=20.0) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            return response.text
+
     async def scrape_match_details(self, match_page_url: str) -> Optional[Dict[str, Any]]:
-        """Scraps match details from VLR.gg (Asíncrono)"""
+        """
+        Scraps match details from VLR.gg con reintentos automáticos.
+        
+        Args:
+            match_page_url: Path relativo del partido (e.g., '/12345/heretics-vs-fnatic')
+            
+        Returns:
+            Diccionario con datos del partido o None si falla
+        """
         full_url = f"{self.vlr_base_url}{match_page_url}"
         try:
-            async with httpx.AsyncClient(headers=self.headers, timeout=20.0) as client:
-                response = await client.get(full_url)
-                response.raise_for_status()
-            
-            soup = BeautifulSoup(response.text, 'html.parser')
+            # Usar método con reintentos
+            html_content = await self._fetch_with_retry(full_url)
+            soup = BeautifulSoup(html_content, 'html.parser')
             
             # 1. Get Teams
             header_links = soup.select(".match-header-link")
@@ -157,15 +270,22 @@ class VLRScraper:
             logger.error(f"Error scraping match {match_page_url}: {e}")
             return None
 
+    @async_retry_with_backoff(max_retries=3, base_delay=1.5, max_delay=20.0)
     async def get_match_urls_from_event(self, event_path: str) -> List[str]:
-        """Scraps match URLs from an event page (Asíncrono)"""
+        """
+        Scraps match URLs from an event page con reintentos automáticos.
+        
+        Args:
+            event_path: Path del evento (e.g., '/event/1234/champions-2024')
+            
+        Returns:
+            Lista de URLs de partidos encontrados
+        """
         url = f"{self.vlr_base_url}{event_path}"
         try:
-            async with httpx.AsyncClient(headers=self.headers, timeout=20.0) as client:
-                response = await client.get(url)
-                response.raise_for_status()
-            
-            soup = BeautifulSoup(response.text, 'html.parser')
+            # Usar método con reintentos
+            html_content = await self._fetch_with_retry(url)
+            soup = BeautifulSoup(html_content, 'html.parser')
             
             match_links = []
             all_links = soup.find_all("a")

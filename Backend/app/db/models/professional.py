@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Float, DateTime, Enum
+from sqlalchemy import Column, Integer, String, ForeignKey, Float, DateTime, Enum, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
@@ -45,6 +45,12 @@ class Player(Base):
     match_stats = relationship("PlayerMatchStats", back_populates="player")
     roster_entries = relationship("Roster", back_populates="player")
 
+    # Performance Indexes
+    __table_args__ = (
+        # Performance Index: Búsqueda rápida por nombre de jugador
+        Index('idx_player_name', 'name'),
+    )
+
 class PriceHistoryPlayer(Base):
     __tablename__ = "price_history_player"
 
@@ -54,3 +60,9 @@ class PriceHistoryPlayer(Base):
     price = Column(Float, nullable=False)
 
     player = relationship("Player", back_populates="price_history")
+
+    # Performance Indexes
+    __table_args__ = (
+        # Performance Index: Consultas de historial ordenadas por fecha
+        Index('idx_price_history_date', 'date'),
+    )

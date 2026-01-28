@@ -44,6 +44,31 @@ class BaseRepository(Generic[ModelType]):
                 return await self.get(obj_in.id, options=options)
         return obj_in
 
+    async def get_by_fields(
+        self, 
+        options: Optional[List[Any]] = None, 
+        **filters
+    ) -> Optional[ModelType]:
+        """
+        Búsqueda genérica usando filtros dinámicos.
+        
+        Args:
+            options: Lista de opciones de carga (e.g., selectinload, joinedload)
+            **filters: Pares clave-valor para filtrar (e.g., email='test@test.com', username='john')
+        
+        Returns:
+            Primer objeto que coincida con los filtros o None
+        
+        Example:
+            user = await repo.get_by_fields(email='test@example.com')
+            team = await repo.get_by_fields(options=[selectinload(Team.players)], name='TH')
+        """
+        query = select(self.model).filter_by(**filters)
+        if options:
+            query = query.options(*options)
+        result = await self.db.execute(query)
+        return result.scalars().first()
+
     async def update(
         self, 
         id: Any, 
@@ -54,7 +79,16 @@ class BaseRepository(Generic[ModelType]):
         if not obj:
             return None
         
-        update_data = obj_in if isinstance(obj_in, dict) else obj_in.dict(exclude_unset=True)
+        # Pydantic V2: usar model_dump() en lugar de dict()
+        if isinstance(obj_in, dict):
+            update_data = obj_in
+        else:
+            # Verificar si es un modelo Pydantic V2
+            update_data = (
+                obj_in.model_dump(exclude_unset=True) 
+                if hasattr(obj_in, 'model_dump') 
+                else obj_in.dict(exclude_unset=True)
+            )
         
         for field, value in update_data.items():
             if hasattr(obj, field) and value is not None:

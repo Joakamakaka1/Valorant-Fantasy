@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, ForeignKey, DateTime, Float
+from sqlalchemy import Column, Integer, ForeignKey, DateTime, Float, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.db.base import Base
@@ -13,3 +13,9 @@ class UserPointsHistory(Base):
     recorded_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")
+
+    # Performance Indexes
+    __table_args__ = (
+        # Performance Index: Consultas de historial de puntos ordenadas por fecha
+        Index('idx_points_history_date', 'recorded_at'),
+    )

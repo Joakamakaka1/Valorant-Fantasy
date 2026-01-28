@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum, Boolean, Float
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum, Boolean, Float, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
@@ -44,6 +44,14 @@ class LeagueMember(Base):
     roster = relationship("Roster", back_populates="league_member")
     selected_team = relationship("Team", foreign_keys=[selected_team_id])  # Relación con Team
 
+    # Constraints y Performance Indexes
+    __table_args__ = (
+        # UniqueConstraint: Un usuario solo puede estar una vez en cada liga
+        UniqueConstraint('league_id', 'user_id', name='uq_league_user'),
+        # Performance Index: Búsqueda rápida por nombre de equipo
+        Index('idx_team_name', 'team_name'),
+    )
+
 
 class Roster(Base):
     __tablename__ = "rosters"
@@ -58,3 +66,9 @@ class Roster(Base):
 
     league_member = relationship("LeagueMember", back_populates="roster")
     player = relationship("Player", back_populates="roster_entries")
+
+    # Constraints y Performance Indexes
+    __table_args__ = (
+        # UniqueConstraint: Un jugador solo puede estar una vez en cada roster de equipo
+        UniqueConstraint('league_member_id', 'player_id', name='uq_roster_player'),
+    )

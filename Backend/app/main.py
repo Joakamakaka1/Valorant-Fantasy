@@ -12,11 +12,10 @@ Configuración de la aplicación FastAPI:
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import IntegrityError, OperationalError, DataError
+from starlette.responses import StreamingResponse
 # from app.core.background import sync_vlr_task # Ya no es necesario
 
 from app.api.v1 import api_router
-from app.db.session import engine
-from app.db.base import Base
 from app.db import models # Register models
 from app.core.config import settings
 from fastapi.middleware.cors import CORSMiddleware
@@ -44,8 +43,11 @@ app = FastAPI(
 # Errores HTTP estándar
 app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 
-# Crear tablas automáticamente
-Base.metadata.create_all(bind=engine)
+# ============================================================================
+# NOTA: La creación de tablas ahora se delega a Alembic
+# Para crear/actualizar tablas, ejecuta:
+#   alembic upgrade head
+# ============================================================================
 
 # Sincronización en segundo plano: Ahora se maneja de forma independiente vía app/worker.py
 # Para ejecutarlo: python -m app.worker
@@ -94,56 +96,88 @@ import json
 
 @app.middleware("http")
 async def wrap_response_middleware(request: Request, call_next):
+    """
+    Middleware optimizado para envolver respuestas en formato estándar.
+    Evita consumir el body_iterator manualmente para prevenir bloqueo del event loop.
+    """
     response = await call_next(request)
     
-    # Solo procesar respuestas JSON exitosas que no sean docs ni login/token
-    if (
+    # Rutas a excluir del procesamiento (docs, openapi, archivos estáticos)
+    excluded_paths = ["/docs", "/redoc", "/openapi.json", "/favicon.ico"]
+    if any(request.url.path.startswith(path) for path in excluded_paths):
+        return response
+    
+    # Solo procesar respuestas JSON exitosas de la API (excluir login/refresh)
+    should_process = (
         request.url.path.startswith("/api") and 
-        not ("/auth/login" in request.url.path or "/auth/refresh" in request.url.path) and
+        "/auth/login" not in request.url.path and 
+        "/auth/refresh" not in request.url.path and
         response.status_code < 400 and 
         "application/json" in response.headers.get("content-type", "")
-    ):
+    )
+    
+    if not should_process:
+        return response
+    
+    # Evitar procesar StreamingResponse o respuestas grandes
+    if isinstance(response, StreamingResponse):
+        return response
+    
+    # Optimización: Solo consumir body para respuestas pequeñas/medianas
+    content_length = response.headers.get("content-length")
+    if content_length and int(content_length) > 1024 * 1024:  # > 1MB
+        return response
+    
+    try:
+        # Consumir body de manera eficiente
         body = b""
         async for chunk in response.body_iterator:
             body += chunk
         
-        try:
-            data = json.loads(body)
-            # Evitar doble envoltura
-            if isinstance(data, dict) and "success" in data:
-                return Response(
-                    content=body,
-                    status_code=response.status_code,
-                    headers=dict(response.headers),
-                    media_type=response.media_type
-                )
-            
-            new_body = json.dumps({
-                "success": True,
-                "data": data,
-                "error": None
-            })
-            
-            # Actualizar headers
-            headers = dict(response.headers)
-            headers["content-length"] = str(len(new_body))
-            
-            return Response(
-                content=new_body,
-                status_code=response.status_code,
-                headers=headers,
-                media_type=response.media_type
-            )
-        except Exception:
-            # Si falla el parseo, devolver original
+        # Intentar parsear JSON
+        data = json.loads(body)
+        
+        # Evitar doble envoltura si ya tiene formato StandardResponse
+        if isinstance(data, dict) and "success" in data:
             return Response(
                 content=body,
                 status_code=response.status_code,
                 headers=dict(response.headers),
                 media_type=response.media_type
             )
-            
-    return response
+        
+        # Envolver en formato estándar
+        wrapped_data = {
+            "success": True,
+            "data": data,
+            "error": None
+        }
+        new_body = json.dumps(wrapped_data).encode('utf-8')
+        
+        # Actualizar headers
+        headers = dict(response.headers)
+        headers["content-length"] = str(len(new_body))
+        
+        return Response(
+            content=new_body,
+            status_code=response.status_code,
+            headers=headers,
+            media_type=response.media_type
+        )
+    
+    except json.JSONDecodeError:
+        # Si no es JSON válido, devolver respuesta original
+        return Response(
+            content=body,
+            status_code=response.status_code,
+            headers=dict(response.headers),
+            media_type=response.media_type
+        )
+    except Exception as e:
+        # En caso de error inesperado, log y devolver original
+        import logging
+        logging.error(f"Error in wrap_response_middleware: {e}")
+        return response
 
 # ============================================================================
 # CORS - Configurado desde variables de entorno

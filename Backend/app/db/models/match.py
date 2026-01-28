@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, Float
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, Float, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.db.base import Base
@@ -25,6 +25,12 @@ class Match(Base):
     team_b = relationship("Team", foreign_keys=[team_b_id])
     player_stats = relationship("PlayerMatchStats", back_populates="match")
 
+    # Performance Indexes
+    __table_args__ = (
+        # Performance Index: Búsqueda rápida por fecha (rankings, filtros temporales)
+        Index('idx_match_date', 'date'),
+    )
+
 class PlayerMatchStats(Base):
     __tablename__ = "player_match_stats"
 
@@ -48,3 +54,9 @@ class PlayerMatchStats(Base):
 
     match = relationship("Match", back_populates="player_stats")
     player = relationship("Player", back_populates="match_stats")
+
+    # Constraints y Performance Indexes
+    __table_args__ = (
+        # UniqueConstraint: Evitar duplicados de stats por scraper (previene race conditions)
+        UniqueConstraint('player_id', 'match_id', name='uq_player_match_stats'),
+    )
