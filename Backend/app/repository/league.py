@@ -1,241 +1,127 @@
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import select, delete
+from sqlalchemy.orm import joinedload
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models.league import League, LeagueMember, Roster
 from typing import List, Optional
+from app.repository.base import BaseRepository
 
-class LeagueRepository:
+class LeagueRepository(BaseRepository[League]):
     '''
-    Repositorio de ligas - Capa de acceso a datos.
+    Repositorio de ligas - Capa de acceso a datos (Asíncrono).
     '''
-    def __init__(self, db: Session):
-        self.db = db
+    def __init__(self, db: AsyncSession):
+        super().__init__(League, db)
 
-    def get_all(self, skip: int = 0, limit: int = 100) -> List[League]:
-        return (
-            self.db.query(League)
-            .offset(skip)
-            .limit(limit)
-            .all()
-        )
+    async def get_by_invite_code(self, invite_code: str) -> Optional[League]:
+        query = select(League).where(League.invite_code == invite_code)
+        result = await self.db.execute(query)
+        return result.scalars().first()
 
-    def get_by_id(self, league_id: int) -> Optional[League]:
-        return (
-            self.db.query(League)
-            .filter(League.id == league_id)
-            .first()
-        )
+    async def get_by_admin(self, admin_user_id: int) -> List[League]:
+        query = select(League).where(League.admin_user_id == admin_user_id)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
 
-    def get_by_invite_code(self, invite_code: str) -> Optional[League]:
-        """Obtener liga por código de invitación"""
-        return (
-            self.db.query(League)
-            .filter(League.invite_code == invite_code)
-            .first()
-        )
-
-    def get_by_admin(self, admin_user_id: int) -> List[League]:
-        """Obtener todas las ligas creadas por un usuario"""
-        return (
-            self.db.query(League)
-            .filter(League.admin_user_id == admin_user_id)
-            .all()
-        )
-
-    def get_by_status(self, status: str) -> List[League]:
-        """Obtener ligas por estado (drafting, active, finished)"""
-        return (
-            self.db.query(League)
-            .filter(League.status == status)
-            .all()
-        )
-
-    def create(self, league: League) -> League:
-        self.db.add(league)
-        self.db.flush()
-        return league
-
-    def update(self, league_id: int, league_data: dict) -> League:
-        league = self.get_by_id(league_id)
-        
-        for key, value in league_data.items():
-            if value is not None:
-                setattr(league, key, value)
-        
-        return league
-
-    def delete(self, league: League) -> None:
-        self.db.delete(league)
+    async def get_by_status(self, status: str) -> List[League]:
+        query = select(League).where(League.status == status)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
 
 
-class LeagueMemberRepository:
+class LeagueMemberRepository(BaseRepository[LeagueMember]):
     '''
-    Repositorio de miembros de liga - Capa de acceso a datos.
+    Repositorio de miembros de liga - Capa de acceso a datos (Asíncrono).
     '''
-    def __init__(self, db: Session):
-        self.db = db
+    def __init__(self, db: AsyncSession):
+        super().__init__(LeagueMember, db)
 
-    def get_all(self, skip: int = 0, limit: int = 100) -> List[LeagueMember]:
-        return (
-            self.db.query(LeagueMember)
-            .offset(skip)
-            .limit(limit)
-            .all()
-        )
+    async def get_by_league(self, league_id: int, options: Optional[List] = None) -> List[LeagueMember]:
+        query = select(LeagueMember).where(LeagueMember.league_id == league_id)
+        if options:
+            query = query.options(*options)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
 
-    def get_by_id(self, member_id: int) -> Optional[LeagueMember]:
-        return (
-            self.db.query(LeagueMember)
-            .filter(LeagueMember.id == member_id)
-            .first()
-        )
+    async def get_by_user(self, user_id: int, options: Optional[List] = None) -> List[LeagueMember]:
+        query = select(LeagueMember).where(LeagueMember.user_id == user_id)
+        if options:
+            query = query.options(*options)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
 
-    def get_by_league(self, league_id: int) -> List[LeagueMember]:
-        """Obtener todos los miembros de una liga"""
-        return (
-            self.db.query(LeagueMember)
-            .filter(LeagueMember.league_id == league_id)
-            .all()
+    async def get_by_user_with_league(self, user_id: int) -> List[LeagueMember]:
+        query = (
+            select(LeagueMember)
+            .options(
+                joinedload(LeagueMember.members_league),
+                joinedload(LeagueMember.user)
+            )
+            .where(LeagueMember.user_id == user_id)
         )
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
 
-    def get_by_user(self, user_id: int) -> List[LeagueMember]:
-        """Obtener todas las ligas en las que participa un usuario"""
-        return (
-            self.db.query(LeagueMember)
-            .filter(LeagueMember.user_id == user_id)
-            .all()
-        )
+    async def get_by_league_and_user(self, league_id: int, user_id: int, options: Optional[List] = None) -> Optional[LeagueMember]:
+        query = select(LeagueMember).where(LeagueMember.league_id == league_id, LeagueMember.user_id == user_id)
+        if options:
+            query = query.options(*options)
+        result = await self.db.execute(query)
+        return result.scalars().first()
 
-    def get_by_user_with_league(self, user_id: int) -> List[LeagueMember]:
-        """Obtener todas las ligas en las que participa un usuario e incluyendo el nombre de la liga"""
-        return (
-            self.db.query(LeagueMember)
-            .options(joinedload(LeagueMember.members_league))
-            .filter(LeagueMember.user_id == user_id)
-            .all()
-        )
-
-    def get_by_league_and_user(self, league_id: int, user_id: int) -> Optional[LeagueMember]:
-        """Verificar si un usuario ya está en una liga"""
-        return (
-            self.db.query(LeagueMember)
-            .filter(LeagueMember.league_id == league_id)
-            .filter(LeagueMember.user_id == user_id)
-            .first()
-        )
-
-    def get_league_rankings(self, league_id: int) -> List[LeagueMember]:
-        """Obtener rankings de una liga (por implementar lógica de puntos totales)"""
-        # Aquí eventualmente ordenaremos por puntos totales del roster
-        return (
-            self.db.query(LeagueMember)
-            .filter(LeagueMember.league_id == league_id)
-            .all()
-        )
+    async def get_league_rankings(self, league_id: int) -> List[LeagueMember]:
+        query = select(LeagueMember).where(LeagueMember.league_id == league_id)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
     
-    def get_league_rankings_with_user(self, league_id: int) -> List[LeagueMember]:
-        """Obtener miembros de una liga incluyendo info del usuario, roster y jugadores"""
-        return (
-            self.db.query(LeagueMember)
+    async def get_league_rankings_with_user(self, league_id: int) -> List[LeagueMember]:
+        query = (
+            select(LeagueMember)
             .options(
                 joinedload(LeagueMember.user),
                 joinedload(LeagueMember.roster).joinedload(Roster.player)
             )
-            .filter(LeagueMember.league_id == league_id)
+            .where(LeagueMember.league_id == league_id)
             .order_by(LeagueMember.total_points.desc())
-            .all()
         )
-
-    def create(self, member: LeagueMember) -> LeagueMember:
-        self.db.add(member)
-        self.db.flush()
-        return member
-
-    def update(self, member_id: int, member_data: dict) -> LeagueMember:
-        member = self.get_by_id(member_id)
-        
-        for key, value in member_data.items():
-            if value is not None:
-                setattr(member, key, value)
-        
-        return member
-
-    def delete(self, member: LeagueMember) -> None:
-        self.db.delete(member)
+        result = await self.db.execute(query)
+        return list(result.scalars().unique().all())
 
 
-class RosterRepository:
+class RosterRepository(BaseRepository[Roster]):
     '''
-    Repositorio de rosters - Capa de acceso a datos.
+    Repositorio de rosters - Capa de acceso a datos (Asíncrono).
     '''
-    def __init__(self, db: Session):
-        self.db = db
+    def __init__(self, db: AsyncSession):
+        super().__init__(Roster, db)
 
-    def get_all(self, skip: int = 0, limit: int = 100) -> List[Roster]:
-        return (
-            self.db.query(Roster)
-            .offset(skip)
-            .limit(limit)
-            .all()
-        )
+    async def get_by_league_member(self, league_member_id: int, options: Optional[List] = None) -> List[Roster]:
+        query = select(Roster).where(Roster.league_member_id == league_member_id)
+        if options:
+            query = query.options(*options)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
 
-    def get_by_id(self, roster_id: int) -> Optional[Roster]:
-        return (
-            self.db.query(Roster)
-            .filter(Roster.id == roster_id)
-            .first()
-        )
+    async def get_starters_by_league_member(self, league_member_id: int, options: Optional[List] = None) -> List[Roster]:
+        query = select(Roster).where(Roster.league_member_id == league_member_id, Roster.is_starter == True)
+        if options:
+            query = query.options(*options)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
 
-    def get_by_league_member(self, league_member_id: int) -> List[Roster]:
-        """Obtener todos los jugadores del roster de un miembro"""
-        return (
-            self.db.query(Roster)
-            .filter(Roster.league_member_id == league_member_id)
-            .all()
-        )
+    async def get_bench_by_league_member(self, league_member_id: int, options: Optional[List] = None) -> List[Roster]:
+        query = select(Roster).where(Roster.league_member_id == league_member_id, Roster.is_bench == True)
+        if options:
+            query = query.options(*options)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
 
-    def get_starters_by_league_member(self, league_member_id: int) -> List[Roster]:
-        """Obtener jugadores titulares del roster"""
-        return (
-            self.db.query(Roster)
-            .filter(Roster.league_member_id == league_member_id)
-            .filter(Roster.is_starter == True)
-            .all()
-        )
+    async def get_by_player_and_member(self, league_member_id: int, player_id: int, options: Optional[List] = None) -> Optional[Roster]:
+        query = select(Roster).where(Roster.league_member_id == league_member_id, Roster.player_id == player_id)
+        if options:
+            query = query.options(*options)
+        result = await self.db.execute(query)
+        return result.scalars().first()
 
-    def get_bench_by_league_member(self, league_member_id: int) -> List[Roster]:
-        """Obtener suplentes del roster"""
-        return (
-            self.db.query(Roster)
-            .filter(Roster.league_member_id == league_member_id)
-            .filter(Roster.is_bench == True)
-            .all()
-        )
-
-    def get_by_player_and_member(self, league_member_id: int, player_id: int) -> Optional[Roster]:
-        """Verificar si un jugador ya está en el roster"""
-        return (
-            self.db.query(Roster)
-            .filter(Roster.league_member_id == league_member_id)
-            .filter(Roster.player_id == player_id)
-            .first()
-        )
-
-    def create(self, roster: Roster) -> Roster:
-        self.db.add(roster)
-        self.db.flush()
-        return roster
-
-    def update(self, roster_id: int, roster_data: dict) -> Roster:
-        roster = self.get_by_id(roster_id)
-        
-        for key, value in roster_data.items():
-            if value is not None:
-                setattr(roster, key, value)
-        
-        return roster
-
-    def delete(self, roster: Roster) -> None:
-        self.db.delete(roster)
-
-    def delete_all_by_league_member(self, league_member_id: int) -> None:
-        """Eliminar todo el roster de un miembro (útil para reset)"""
-        self.db.query(Roster).filter(Roster.league_member_id == league_member_id).delete()
+    async def delete_all_by_league_member(self, league_member_id: int) -> None:
+        query = delete(Roster).where(Roster.league_member_id == league_member_id)
+        await self.db.execute(query)

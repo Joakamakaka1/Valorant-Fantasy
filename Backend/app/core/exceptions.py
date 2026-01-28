@@ -29,28 +29,23 @@ async def app_error_handler(request: Request, exc: AppError):
     return JSONResponse(
         status_code=exc.status_code,
         content={
+            "success": False,
+            "data": None,
             "error": {
                 "code": exc.code,
                 "message": exc.message,
-                "type": "application_error"
+                "type": "application_error",
+                "details": exc.details if exc.details else None
             },
-            "details": exc.details if exc.details else None,
             "path": str(request.url.path)
         }
     )
 
-# ============================================================================
-# ERRORES DE VALIDACIÓN (Pydantic)
-# ============================================================================
-
 async def validation_error_handler(request: Request, exc: RequestValidationError):
     """
     Maneja errores de validación de Pydantic (422 -> 400)
-    Proporciona mensajes claros sobre qué campos fallaron
     """
     errors = exc.errors()
-    
-    # Formatear errores para que sean más legibles
     formatted_errors = []
     for error in errors:
         field = " -> ".join(str(loc) for loc in error["loc"])
@@ -65,181 +60,161 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
         content={
+            "success": False,
+            "data": None,
             "error": {
                 "code": "VALIDATION_ERROR",
                 "message": "Los datos enviados no son válidos. Revisa los campos marcados como erróneos.",
-                "type": "validation_error"
-            },
-            "details": {
-                "errors": formatted_errors,
-                "total_errors": len(formatted_errors)
+                "type": "validation_error",
+                "details": {
+                    "errors": formatted_errors,
+                    "total_errors": len(formatted_errors)
+                }
             },
             "path": str(request.url.path)
         }
     )
 
-# ============================================================================
-# ERRORES DE BASE DE DATOS (SQLAlchemy)
-# ============================================================================
-
 async def integrity_error_handler(request: Request, exc: IntegrityError):
-    """
-    Maneja errores de integridad de base de datos
-    - Claves duplicadas
-    - Violaciones de foreign key
-    - Violaciones de unique constraint
-    """
+    """Maneja errores de integridad de base de datos"""
     error_msg = str(exc.orig)
     
-    # Detectar tipo específico de error de integridad
     if "UNIQUE constraint failed" in error_msg or "Duplicate entry" in error_msg:
         code = "DUPLICATE_ENTRY"
-        message = "El registro que intentas crear ya existe. Verifica que no estés duplicando información única como emails, nombres de usuario, etc."
+        message = "El registro que intentas crear ya existe."
     elif "FOREIGN KEY constraint failed" in error_msg or "foreign key constraint" in error_msg.lower():
         code = "INVALID_REFERENCE"
-        message = "Estás intentando hacer referencia a un registro que no existe. Verifica que los IDs de relaciones (user_id, trip_id, etc.) sean correctos."
+        message = "Estás intentando hacer referencia a un registro que no existe."
     elif "NOT NULL constraint failed" in error_msg:
         code = "MISSING_REQUIRED_FIELD"
-        message = "Falta un campo obligatorio. Asegúrate de enviar todos los datos requeridos."
+        message = "Falta un campo obligatorio."
     else:
         code = "DATABASE_INTEGRITY_ERROR"
-        message = "Error de integridad en la base de datos. Los datos no cumplen con las restricciones definidas."
+        message = "Error de integridad en la base de datos."
     
     logger.error(f"IntegrityError: {error_msg} | Path: {request.url.path}")
     
     return JSONResponse(
         status_code=status.HTTP_409_CONFLICT,
         content={
+            "success": False,
+            "data": None,
             "error": {
                 "code": code,
                 "message": message,
-                "type": "database_integrity_error"
-            },
-            "details": {
-                "database_message": error_msg
+                "type": "database_integrity_error",
+                "details": {"database_message": error_msg}
             },
             "path": str(request.url.path)
         }
     )
 
 async def operational_error_handler(request: Request, exc: OperationalError):
-    """
-    Maneja errores operacionales de base de datos
-    - Conexión perdida
-    - Timeout
-    - Base de datos no disponible
-    """
+    """Maneja errores operacionales de base de datos"""
     error_msg = str(exc.orig)
-    
     logger.error(f"OperationalError: {error_msg} | Path: {request.url.path}")
     
     return JSONResponse(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         content={
+            "success": False,
+            "data": None,
             "error": {
                 "code": "DATABASE_UNAVAILABLE",
-                "message": "No se pudo conectar con la base de datos. Intenta nuevamente en unos momentos.",
-                "type": "database_operational_error"
-            },
-            "details": {
-                "database_message": error_msg
+                "message": "No se pudo conectar con la base de datos.",
+                "type": "database_operational_error",
+                "details": {"database_message": error_msg}
             },
             "path": str(request.url.path)
         }
     )
 
 async def data_error_handler(request: Request, exc: DataError):
-    """
-    Maneja errores de datos en la base de datos
-    - Tipo de dato incorrecto
-    - Valor fuera de rango
-    """
+    """Maneja errores de datos en la base de datos"""
     error_msg = str(exc.orig)
-    
     logger.error(f"DataError: {error_msg} | Path: {request.url.path}")
     
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
         content={
+            "success": False,
+            "data": None,
             "error": {
                 "code": "INVALID_DATA_TYPE",
-                "message": "Los datos enviados tienen un formato incorrecto. Verifica que los tipos de datos sean correctos (números, texto, fechas, etc.).",
-                "type": "database_data_error"
-            },
-            "details": {
-                "database_message": error_msg
+                "message": "Los datos enviados tienen un formato incorrecto.",
+                "type": "database_data_error",
+                "details": {"database_message": error_msg}
             },
             "path": str(request.url.path)
         }
     )
 
-# ============================================================================
-# ERROR 404 - NOT FOUND
-# ============================================================================
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """Maneja excepciones HTTP estándar (401, 403, etc.)"""
+    logger.warning(f"HTTPException {exc.status_code}: {exc.detail} | Path: {request.url.path}")
+    
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "success": False,
+            "data": None,
+            "error": {
+                "code": f"HTTP_ERROR_{exc.status_code}",
+                "message": exc.detail,
+                "type": "http_exception"
+            },
+            "path": str(request.url.path)
+        }
+    )
 
 async def not_found_handler(request: Request, exc: Exception):
     """Maneja rutas no encontradas (404)"""
-    logger.warning(f"NotFound: {request.url.path}")
-    
     return JSONResponse(
         status_code=status.HTTP_404_NOT_FOUND,
         content={
+            "success": False,
+            "data": None,
             "error": {
                 "code": "ROUTE_NOT_FOUND",
-                "message": f"La ruta '{request.url.path}' no existe en esta API. Verifica la URL.",
+                "message": f"La ruta '{request.url.path}' no existe.",
                 "type": "not_found_error"
-            },
-            "details": {
-                "available_docs": "/docs",
-                "requested_path": str(request.url.path)
             },
             "path": str(request.url.path)
         }
     )
-
-# ============================================================================
-# ERROR 405 - METHOD NOT ALLOWED
-# ============================================================================
 
 async def method_not_allowed_handler(request: Request, exc: Exception):
     """Maneja métodos HTTP no permitidos (405)"""
-    logger.warning(f"MethodNotAllowed: {request.method} on {request.url.path}")
-    
     return JSONResponse(
         status_code=status.HTTP_405_METHOD_NOT_ALLOWED,
         content={
+            "success": False,
+            "data": None,
             "error": {
                 "code": "METHOD_NOT_ALLOWED",
-                "message": f"El método HTTP '{request.method}' no está permitido para esta ruta. Verifica la documentación.",
+                "message": f"El método '{request.method}' no está permitido.",
                 "type": "method_not_allowed_error"
-            },
-            "details": {
-                "method_used": request.method,
-                "available_docs": "/docs"
             },
             "path": str(request.url.path)
         }
     )
 
-# ============================================================================
-# ERROR GENÉRICO (500)
-# ============================================================================
-
 async def unhandled_error_handler(request: Request, exc: Exception):
     """Maneja errores no controlados (500)"""
-    logger.error(f"UnhandledException: {type(exc).__name__} - {str(exc)} | Path: {request.url.path}", exc_info=True)
+    logger.error(f"UnhandledException: {type(exc).__name__} - {str(exc)}", exc_info=True)
     
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
+            "success": False,
+            "data": None,
             "error": {
                 "code": "INTERNAL_SERVER_ERROR",
-                "message": "Ocurrió un error inesperado en el servidor. El equipo técnico ha sido notificado.",
-                "type": "server_error"
-            },
-            "details": {
-                "error_type": type(exc).__name__,
-                "error_message": str(exc)
+                "message": "Ocurrió un error inesperado.",
+                "type": "server_error",
+                "details": {"error_type": type(exc).__name__, "error_message": str(exc)}
             },
             "path": str(request.url.path)
         }

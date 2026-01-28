@@ -45,6 +45,9 @@ def transactional(func):
     @wraps(func)
     async def async_wrapper(*args, **kwargs):
         db = get_db_session(*args, **kwargs)
+        from sqlalchemy.ext.asyncio import AsyncSession
+        
+        is_async = isinstance(db, AsyncSession)
         
         if not db:
             logger.warning(f"TRANSACTION SKIPPED: No DB session found for {func.__name__}")
@@ -52,15 +55,24 @@ def transactional(func):
             
         try:
             result = await func(*args, **kwargs)
-            db.commit()
-            if hasattr(result, "__dict__"):
-                db.refresh(result)
+            if is_async:
+                await db.commit()
+                if result and hasattr(result, "__dict__"):
+                    try:
+                        await db.refresh(result)
+                    except: pass # Avoid errors if result is not attached
+            else:
+                db.commit()
+                if result and hasattr(result, "__dict__"):
+                    db.refresh(result)
             return result
         except AppError:
-            db.rollback()
+            if is_async: await db.rollback()
+            else: db.rollback()
             raise
         except Exception as e:
-            db.rollback()
+            if is_async: await db.rollback()
+            else: db.rollback()
             logger.error(f"Transaction failed in {func.__name__}: {str(e)}")
             raise AppError(500, ErrorCode.INTERNAL_SERVER_ERROR, str(e))
 

@@ -1,7 +1,5 @@
-from pydantic import BaseModel, EmailStr, ConfigDict, field_validator
+from pydantic import BaseModel, EmailStr, ConfigDict, Field
 from typing import Optional, Literal
-
-import string
 import datetime
 
 # ============================================================================
@@ -12,7 +10,6 @@ class UserBasic(BaseModel):
     """Schema básico de usuario para usar en relaciones"""
     id: int
     email: EmailStr
-    username: str
     username: str
     
     model_config = ConfigDict(from_attributes=True)
@@ -25,71 +22,28 @@ class UserBase(BaseModel):
     id: int
     email: EmailStr
     username: str
-    role: Optional[Literal["user", "admin"]] = "user"  # Role opcional, por defecto "user"
+    role: Literal["user", "admin"] = "user"
 
 class User(UserBase):
     """Schema completo de usuario para uso interno"""
-    created_at: Optional[datetime.datetime] = None  # Use datetime from import or just datetime if imported
+    created_at: Optional[datetime.datetime] = None
     
     model_config = ConfigDict(from_attributes=True)
 
 class UserCreate(BaseModel):
     email: EmailStr
-    username: str
-    password: str  # El cliente envía la contraseña en texto plano, se hashea en el servidor
-    role: Optional[Literal["user", "admin"]] = "user"  # Role opcional, por defecto "user"
-    
-    @field_validator('username')
-    @classmethod
-    def validate_username_length(cls, v: str) -> str:
-        if len(v) < 3:
-            raise ValueError('El nombre de usuario debe tener al menos 3 caracteres')
-        if len(v) > 50:
-            raise ValueError('El nombre de usuario no puede tener más de 50 caracteres')
-        return v
-
-    @field_validator('password')
-    @classmethod
-    def validate_password_length(cls, v: str) -> str:
-        # Validar que solo contenga caracteres alfanuméricos y símbolos comunes
-        # Rechazar emojis y caracteres no-ASCII
-        allowed_chars = string.ascii_letters + string.digits + string.punctuation + ' '
-        
-        for char in v:
-            if char not in allowed_chars:
-                raise ValueError(
-                    'La contraseña solo puede contener letras (a-z, A-Z), números (0-9), '
-                    'y símbolos estándar (!@#$%^&*, etc.). No se permiten emojis ni caracteres especiales.'
-                )
-        
-        password_bytes = len(v.encode('utf-8'))
-        
-        if password_bytes < 8:
-            raise ValueError('La contraseña debe tener al menos 8 bytes')
-        if password_bytes > 72:  # Límite de bcrypt
-            raise ValueError('La contraseña no puede exceder 72 bytes (límite de bcrypt)')
-        
-        return v
+    username: str = Field(..., min_length=3, max_length=50)
+    password: str = Field(..., min_length=8, max_length=72)
+    role: Optional[Literal["user", "admin"]] = "user"
 
 class UserLogin(BaseModel):
     email: EmailStr
-    password: str  # El cliente envía la contraseña en texto plano
+    password: str
 
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
-    username: Optional[str] = None
-    password: Optional[str] = None  # El cliente envía la contraseña en texto plano
-    # role removido de aquí por seguridad - usar endpoint /change-role
-    
-    @field_validator('username')
-    @classmethod
-    def validate_username_length(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None:
-            if len(v) < 3:
-                raise ValueError('El nombre de usuario debe tener al menos 3 caracteres')
-            if len(v) > 50:
-                raise ValueError('El nombre de usuario no puede tener más de 50 caracteres')
-        return v
+    username: Optional[str] = Field(None, min_length=3, max_length=50)
+    password: Optional[str] = Field(None, min_length=8, max_length=72)
 
 class RoleUpdate(BaseModel):
     """Schema para cambiar el role de un usuario (solo admin)"""
@@ -100,11 +54,10 @@ class RoleUpdate(BaseModel):
 # ============================================================================
 
 class UserBasicOut(BaseModel):
-    """Schema simplificado de usuario para respuestas de token (sin relaciones)"""
+    """Schema simplificado de usuario para respuestas (sin relaciones)"""
     id: int
     email: EmailStr
     username: str
-    role: str
     role: str
     
     model_config = ConfigDict(from_attributes=True)
@@ -114,8 +67,7 @@ class UserOut(BaseModel):
     id: int
     email: EmailStr
     username: str
-    role: str  # Incluir role en la respuesta
-    role: str  # Incluir role en la respuesta
+    role: str
     
     model_config = ConfigDict(from_attributes=True)
 

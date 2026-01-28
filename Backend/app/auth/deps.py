@@ -12,12 +12,21 @@ from app.core.exceptions import AppError
 # DATABASE DEPENDENCY
 # ============================================================================
 
+from app.db.session import SessionLocal, AsyncSessionLocal
+
 def get_db():
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
+
+async def get_async_db():
+    async with AsyncSessionLocal() as db:
+        try:
+            yield db
+        finally:
+            await db.close()
 
 # ============================================================================
 # AUTHENTICATION DEPENDENCIES

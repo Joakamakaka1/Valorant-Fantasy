@@ -5,6 +5,7 @@ uvicorn==0.38.0
 # Database
 mysql-connector-python==9.5.0
 sqlalchemy==2.0.44
+aiomysql==0.2.0
 
 # Validation and Data Models
 pydantic==2.12.4
@@ -44,7 +45,6 @@ python-multipart==0.0.20
 
 # Web Scraping
 beautifulsoup4==4.12.3
-lxml==4.9.3
 
 # Testing
 requests==2.32.5

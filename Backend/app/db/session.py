@@ -8,11 +8,25 @@ Crea el engine y el sessionmaker para interactuar con MySQL.
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from app.core.config import settings
 
-# Usar DATABASE_URL desde la configuración
+# 1. Configuración SÍNCRONA (Para scripts simples o worker actual)
 DATABASE_URL = settings.database_url
-
-# Echo=True muestra las queries SQL en consola (útil para debug)
-engine = create_engine(DATABASE_URL, echo=True)
+engine = create_engine(DATABASE_URL, echo=False) # echo=False para producción, o True para debug
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+ASYNC_DATABASE_URL = settings.async_database_url.replace("asyncmy", "aiomysql")
+async_engine = create_async_engine(
+    ASYNC_DATABASE_URL,
+    echo=False,
+    pool_pre_ping=True
+)
+
+AsyncSessionLocal = async_sessionmaker(
+    bind=async_engine,
+    class_=AsyncSession,
+    autoflush=False,
+    autocommit=False,
+    expire_on_commit=False # Importante en async para evitar errores de sesión cerrada
+)

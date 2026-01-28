@@ -12,8 +12,7 @@ Configuración de la aplicación FastAPI:
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import IntegrityError, OperationalError, DataError
-import asyncio
-from app.core.background import sync_vlr_task
+# from app.core.background import sync_vlr_task # Ya no es necesario
 
 from app.api.v1 import api_router
 from app.db.session import engine
@@ -28,10 +27,12 @@ from app.core.exceptions import (
     validation_error_handler, 
     unhandled_error_handler,
     integrity_error_handler,
-    operational_error_handler,
-    data_error_handler,
-    not_found_handler,
-    method_not_allowed_handler
+    operational_error_handler, 
+    data_error_handler, 
+    not_found_handler, 
+    method_not_allowed_handler,
+    http_exception_handler,
+    StarletteHTTPException
 )
 
 app = FastAPI(
@@ -40,13 +41,14 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Errores HTTP estándar
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+
 # Crear tablas automáticamente
 Base.metadata.create_all(bind=engine)
 
-@app.on_event("startup")
-async def startup_event():
-    # Iniciar sincronización periódica en segundo plano
-    asyncio.create_task(sync_vlr_task())
+# Sincronización en segundo plano: Ahora se maneja de forma independiente vía app/worker.py
+# Para ejecutarlo: python -m app.worker
 
 # ============================================================================
 # SEED DATABASE (Development/Testing)
@@ -87,6 +89,62 @@ app.add_exception_handler(405, method_not_allowed_handler)
 # Error genérico para cualquier otra excepción
 app.add_exception_handler(Exception, unhandled_error_handler)
 
+from fastapi import Request, Response
+import json
+
+@app.middleware("http")
+async def wrap_response_middleware(request: Request, call_next):
+    response = await call_next(request)
+    
+    # Solo procesar respuestas JSON exitosas que no sean docs ni login/token
+    if (
+        request.url.path.startswith("/api") and 
+        not ("/auth/login" in request.url.path or "/auth/refresh" in request.url.path) and
+        response.status_code < 400 and 
+        "application/json" in response.headers.get("content-type", "")
+    ):
+        body = b""
+        async for chunk in response.body_iterator:
+            body += chunk
+        
+        try:
+            data = json.loads(body)
+            # Evitar doble envoltura
+            if isinstance(data, dict) and "success" in data:
+                return Response(
+                    content=body,
+                    status_code=response.status_code,
+                    headers=dict(response.headers),
+                    media_type=response.media_type
+                )
+            
+            new_body = json.dumps({
+                "success": True,
+                "data": data,
+                "error": None
+            })
+            
+            # Actualizar headers
+            headers = dict(response.headers)
+            headers["content-length"] = str(len(new_body))
+            
+            return Response(
+                content=new_body,
+                status_code=response.status_code,
+                headers=headers,
+                media_type=response.media_type
+            )
+        except Exception:
+            # Si falla el parseo, devolver original
+            return Response(
+                content=body,
+                status_code=response.status_code,
+                headers=dict(response.headers),
+                media_type=response.media_type
+            )
+            
+    return response
+
 # ============================================================================
 # CORS - Configurado desde variables de entorno
 # ============================================================================
@@ -96,6 +154,5 @@ app.add_middleware(
     allow_origins=settings.allowed_origins,  # Usar configuración desde .env
     allow_credentials=True,
     allow_methods=["*"], 
-    allow_headers=["*"],
-    
+    allow_headers=["*"]
 )

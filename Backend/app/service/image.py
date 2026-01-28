@@ -2,6 +2,7 @@ import cloudinary
 import cloudinary.uploader
 from fastapi import UploadFile, HTTPException, status
 from app.core.config import settings
+from fastapi.concurrency import run_in_threadpool
 
 # Configure Cloudinary
 cloudinary.config( 
@@ -14,10 +15,9 @@ cloudinary.config(
 class ImageService:
     
     @staticmethod
-    def upload_image(file: UploadFile) -> str:
+    async def upload_image(file: UploadFile) -> str:
         """
-        Uploads an image to Cloudinary and returns the secure URL.
-        Validates the file type before uploading.
+        Uploads an image to Cloudinary (Async wrapper).
         """
         # Validate content type
         if file.content_type not in ["image/jpeg", "image/png", "image/jpg", "image/webp"]:
@@ -27,11 +27,11 @@ class ImageService:
             )
         
         try:
-            # Upload to Cloudinary
-            # The file.file object is a SpooledTemporaryFile which Cloudinary accepts
-            upload_result = cloudinary.uploader.upload(
+            # Run blocking Cloudinary upload in a thread pool
+            upload_result = await run_in_threadpool(
+                cloudinary.uploader.upload,
                 file.file,
-                folder="aurevia_profiles",  # Optional: organize in a folder
+                folder="fantasy_valorant_profiles",
                 resource_type="image"
             )
             

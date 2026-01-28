@@ -1,186 +1,121 @@
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import select, or_
+from sqlalchemy.orm import joinedload
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models.match import Match, PlayerMatchStats
 from typing import List, Optional
 from datetime import datetime
 
-class MatchRepository:
+from app.repository.base import BaseRepository
+
+class MatchRepository(BaseRepository[Match]):
     '''
-    Repositorio de partidos - Capa de acceso a datos.
+    Repositorio de partidos - Capa de acceso a datos (Asíncrono).
     '''
-    def __init__(self, db: Session):
-        self.db = db
+    def __init__(self, db: AsyncSession):
+        super().__init__(Match, db)
 
-    def get_all(self, skip: int = 0, limit: int = 100) -> List[Match]:
-        return (
-            self.db.query(Match)
-            .options(
-                joinedload(Match.team_a),
-                joinedload(Match.team_b),
-                joinedload(Match.player_stats).joinedload(PlayerMatchStats.player)
-            )
-            .offset(skip)
-            .limit(limit)
-            .all()
-        )
+    async def get_all(self, skip: int = 0, limit: int = 100, options: Optional[List] = None) -> List[Match]:
+        query = select(Match).offset(skip).limit(limit)
+        if options:
+            query = query.options(*options)
+        result = await self.db.execute(query)
+        return list(result.scalars().unique().all())
 
-    def get_by_id(self, match_id: int) -> Optional[Match]:
-        return (
-            self.db.query(Match)
-            .options(
-                joinedload(Match.team_a),
-                joinedload(Match.team_b),
-                joinedload(Match.player_stats).joinedload(PlayerMatchStats.player)
-            )
-            .filter(Match.id == match_id)
-            .first()
-        )
+    async def get_by_id(self, match_id: int, options: Optional[List] = None) -> Optional[Match]:
+        query = select(Match).where(Match.id == match_id)
+        if options:
+            query = query.options(*options)
+        result = await self.db.execute(query)
+        return result.scalars().unique().first()
 
-    def get_by_vlr_match_id(self, vlr_match_id: str) -> Optional[Match]:
-        """Obtener partido por ID de VLR (útil para evitar duplicados)"""
-        return (
-            self.db.query(Match)
-            .filter(Match.vlr_match_id == vlr_match_id)
-            .first()
-        )
+    async def get_by_vlr_match_id(self, vlr_match_id: str) -> Optional[Match]:
+        query = select(Match).where(Match.vlr_match_id == vlr_match_id)
+        result = await self.db.execute(query)
+        return result.scalars().first()
 
-    def get_by_status(self, status: str) -> List[Match]:
-        """Obtener partidos por estado (upcoming, live, completed)"""
-        return (
-            self.db.query(Match)
-            .filter(Match.status == status)
-            .all()
-        )
+    async def get_by_status(self, status: str, options: Optional[List] = None) -> List[Match]:
+        query = select(Match).where(Match.status == status)
+        if options:
+            query = query.options(*options)
+        result = await self.db.execute(query)
+        return list(result.scalars().unique().all())
 
-    def get_unprocessed(self) -> List[Match]:
-        """Obtener partidos completados pero no procesados (para actualizar puntos)"""
-        return (
-            self.db.query(Match)
-            .filter(Match.status == "completed")
-            .filter(Match.is_processed == False)
-            .all()
-        )
+    async def get_unprocessed(self) -> List[Match]:
+        query = select(Match).where(Match.status == "completed", Match.is_processed == False)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
 
-    def get_by_team(self, team_id: int) -> List[Match]:
-        """Obtener todos los partidos de un equipo"""
-        return (
-            self.db.query(Match)
-            .filter((Match.team_a_id == team_id) | (Match.team_b_id == team_id))
-            .all()
-        )
+    async def get_by_team(self, team_id: int, options: Optional[List] = None) -> List[Match]:
+        query = select(Match).where(or_(Match.team_a_id == team_id, Match.team_b_id == team_id))
+        if options:
+            query = query.options(*options)
+        result = await self.db.execute(query)
+        return list(result.scalars().unique().all())
 
-    def get_by_tournament(self, tournament_name: str) -> List[Match]:
-        """Obtener partidos de un torneo"""
-        return (
-            self.db.query(Match)
-            .filter(Match.tournament_name == tournament_name)
-            .all()
-        )
+    async def get_by_tournament(self, tournament_name: str) -> List[Match]:
+        query = select(Match).where(Match.tournament_name == tournament_name)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
 
-    def get_recent(self, days: int = 7) -> List[Match]:
-        """Obtener partidos recientes (últimos X días)"""
+    async def get_recent(self, days: int = 7, options: Optional[List] = None) -> List[Match]:
         from datetime import timedelta
         cutoff_date = datetime.utcnow() - timedelta(days=days)
-        return (
-            self.db.query(Match)
-            .options(
-                joinedload(Match.team_a),
-                joinedload(Match.team_b),
-                joinedload(Match.player_stats).joinedload(PlayerMatchStats.player)
-            )
-            .filter(Match.date >= cutoff_date)
+        query = (
+            select(Match)
+            .where(Match.date >= cutoff_date)
             .order_by(Match.date.desc())
-            .all()
         )
-
-    def create(self, match: Match) -> Match:
-        self.db.add(match)
-        self.db.flush()
-        return match
-
-    def update(self, match_id: int, match_data: dict) -> Match:
-        match = self.get_by_id(match_id)
-        
-        for key, value in match_data.items():
-            if value is not None:
-                setattr(match, key, value)
-        
-        return match
-
-    def delete(self, match: Match) -> None:
-        self.db.delete(match)
+        if options:
+            query = query.options(*options)
+        result = await self.db.execute(query)
+        return list(result.scalars().unique().all())
 
 
-class PlayerMatchStatsRepository:
+class PlayerMatchStatsRepository(BaseRepository[PlayerMatchStats]):
     '''
-    Repositorio de estadísticas de jugadores en partidos - Capa de acceso a datos.
+    Repositorio de estadísticas de jugadores en partidos - Capa de acceso a datos (Asíncrono).
     '''
-    def __init__(self, db: Session):
-        self.db = db
+    def __init__(self, db: AsyncSession):
+        super().__init__(PlayerMatchStats, db)
 
-    def get_all(self, skip: int = 0, limit: int = 100) -> List[PlayerMatchStats]:
-        return (
-            self.db.query(PlayerMatchStats)
-            .offset(skip)
-            .limit(limit)
-            .all()
-        )
+    async def get_all(self, skip: int = 0, limit: int = 100, options: Optional[List] = None) -> List[PlayerMatchStats]:
+        query = select(PlayerMatchStats).offset(skip).limit(limit)
+        if options:
+            query = query.options(*options)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
 
-    def get_by_id(self, stats_id: int) -> Optional[PlayerMatchStats]:
-        return (
-            self.db.query(PlayerMatchStats)
-            .filter(PlayerMatchStats.id == stats_id)
-            .first()
-        )
+    async def get_by_id(self, stats_id: int, options: Optional[List] = None) -> Optional[PlayerMatchStats]:
+        query = select(PlayerMatchStats).where(PlayerMatchStats.id == stats_id)
+        if options:
+            query = query.options(*options)
+        result = await self.db.execute(query)
+        return result.scalars().first()
 
-    def get_by_match(self, match_id: int) -> List[PlayerMatchStats]:
-        """Obtener todas las estadísticas de un partido"""
-        return (
-            self.db.query(PlayerMatchStats)
-            .filter(PlayerMatchStats.match_id == match_id)
-            .all()
-        )
+    async def get_by_match(self, match_id: int, options: Optional[List] = None) -> List[PlayerMatchStats]:
+        query = select(PlayerMatchStats).where(PlayerMatchStats.match_id == match_id)
+        if options:
+            query = query.options(*options)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
 
-    def get_by_player(self, player_id: int) -> List[PlayerMatchStats]:
-        """Obtener todas las estadísticas de un jugador"""
-        return (
-            self.db.query(PlayerMatchStats)
-            .filter(PlayerMatchStats.player_id == player_id)
-            .order_by(PlayerMatchStats.match_id.desc())
-            .all()
-        )
+    async def get_by_player(self, player_id: int, options: Optional[List] = None) -> List[PlayerMatchStats]:
+        query = select(PlayerMatchStats).where(PlayerMatchStats.player_id == player_id).order_by(PlayerMatchStats.match_id.desc())
+        if options:
+            query = query.options(*options)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
 
-    def get_by_player_recent(self, player_id: int, limit: int = 5) -> List[PlayerMatchStats]:
-        """Obtener estadísticas recientes de un jugador"""
-        return (
-            self.db.query(PlayerMatchStats)
-            .filter(PlayerMatchStats.player_id == player_id)
-            .order_by(PlayerMatchStats.match_id.desc())
-            .limit(limit)
-            .all()
-        )
+    async def get_by_player_recent(self, player_id: int, limit: int = 5, options: Optional[List] = None) -> List[PlayerMatchStats]:
+        query = select(PlayerMatchStats).where(PlayerMatchStats.player_id == player_id).order_by(PlayerMatchStats.match_id.desc()).limit(limit)
+        if options:
+            query = query.options(*options)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
 
-    def get_by_match_and_player(self, match_id: int, player_id: int) -> Optional[PlayerMatchStats]:
-        """Obtener estadísticas específicas de un jugador en un partido"""
-        return (
-            self.db.query(PlayerMatchStats)
-            .filter(PlayerMatchStats.match_id == match_id)
-            .filter(PlayerMatchStats.player_id == player_id)
-            .first()
-        )
-
-    def create(self, stats: PlayerMatchStats) -> PlayerMatchStats:
-        self.db.add(stats)
-        self.db.flush()
-        return stats
-
-    def update(self, stats_id: int, stats_data: dict) -> PlayerMatchStats:
-        stats = self.get_by_id(stats_id)
-        
-        for key, value in stats_data.items():
-            if value is not None:
-                setattr(stats, key, value)
-        
-        return stats
-
-    def delete(self, stats: PlayerMatchStats) -> None:
-        self.db.delete(stats)
+    async def get_by_match_and_player(self, match_id: int, player_id: int, options: Optional[List] = None) -> Optional[PlayerMatchStats]:
+        query = select(PlayerMatchStats).where(PlayerMatchStats.match_id == match_id, PlayerMatchStats.player_id == player_id)
+        if options:
+            query = query.options(*options)
+        result = await self.db.execute(query)
+        return result.scalars().first()

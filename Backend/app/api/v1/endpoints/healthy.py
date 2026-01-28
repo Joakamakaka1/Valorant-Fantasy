@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
-from app.auth.deps import get_db
+from app.auth.deps import get_async_db
 from app.core.config import settings
 
 # ============================================================================
@@ -13,8 +13,7 @@ from app.core.config import settings
 router = APIRouter(tags=["Health"])
 
 @router.get("/health") # http://localhost:8000/api/health
-
-def health_check():
+async def health_check():
     return {
         "status": "healthy",
         "environment": settings.ENVIRONMENT,
@@ -22,9 +21,9 @@ def health_check():
     }
 
 @router.get("/health/db") # http://localhost:8000/api/health/db
-def health_check_db(db: Session = Depends(get_db)):
+async def health_check_db(db: AsyncSession = Depends(get_async_db)):
     try:
-        db.execute(text("SELECT 1"))
+        await db.execute(text("SELECT 1"))
         return {"status": "healthy", "database": "connected"}
     except Exception as e:
         return {

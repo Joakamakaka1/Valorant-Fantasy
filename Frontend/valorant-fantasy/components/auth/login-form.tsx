@@ -20,7 +20,7 @@ export default function LoginForm() {
     try {
       await login({ email, password });
     } catch (err: any) {
-      setError(err.response?.data?.message || "Credenciales incorrectas");
+      setError(err.message || "Credenciales incorrectas");
     } finally {
       setIsLoading(false);
     }

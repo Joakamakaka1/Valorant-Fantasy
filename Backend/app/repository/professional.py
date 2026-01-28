@@ -1,71 +1,44 @@
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import select
+from sqlalchemy.orm import joinedload
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models.professional import Team, Player, PriceHistoryPlayer
 from typing import List, Optional
+from app.repository.base import BaseRepository
 
-class TeamRepository:
+class TeamRepository(BaseRepository[Team]):
     '''
-    Repositorio de equipos profesionales - Capa de acceso a datos.
+    Repositorio de equipos profesionales - Capa de acceso a datos (Asíncrono).
     '''
-    def __init__(self, db: Session):
-        self.db = db
+    def __init__(self, db: AsyncSession):
+        super().__init__(Team, db)
 
-    def get_all(self, skip: int = 0, limit: int = 100) -> List[Team]:
-        return (
-            self.db.query(Team)
-            .offset(skip)
-            .limit(limit)
-            .all()
-        )
+    async def get_by_name(self, name: str) -> Optional[Team]:
+        query = select(Team).where(Team.name == name)
+        result = await self.db.execute(query)
+        return result.scalars().first()
 
-    def get_by_id(self, team_id: int) -> Optional[Team]:
-        return (
-            self.db.query(Team)
-            .filter(Team.id == team_id)
-            .first()
-        )
+    async def get_by_region(self, region: str) -> List[Team]:
+        query = select(Team).where(Team.region == region)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
 
-    def get_by_name(self, name: str) -> Optional[Team]:
-        return (
-            self.db.query(Team)
-            .filter(Team.name == name)
-            .first()
-        )
 
-    def get_by_region(self, region: str) -> List[Team]:
-        return (
-            self.db.query(Team)
-            .filter(Team.region == region)
-            .all()
-        )
+class PlayerRepository(BaseRepository[Player]):
+    '''
+    Repositorio de jugadores - Capa de acceso a datos (Asíncrono).
+    '''
+    def __init__(self, db: AsyncSession):
+        super().__init__(Player, db)
 
-    def create(self, team: Team) -> Team:
-        self.db.add(team)
-        self.db.flush()
-        return team
-
-    def update(self, team_id: int, team_data: dict) -> Team:
-        team = self.get_by_id(team_id)
+    async def get_all(self, skip: int = 0, limit: int = 100, sort_by: str = None, options: Optional[List] = None) -> List[Player]:
+        query = select(Player).offset(skip).limit(limit)
         
-        for key, value in team_data.items():
-            if value is not None:
-                setattr(team, key, value)
-        
-        return team
+        if options:
+            query = query.options(*options)
+        else:
+             # Restore default eager loading
+             query = query.options(joinedload(Player.team))
 
-    def delete(self, team: Team) -> None:
-        self.db.delete(team)
-
-
-class PlayerRepository:
-    '''
-    Repositorio de jugadores - Capa de acceso a datos.
-    '''
-    def __init__(self, db: Session):
-        self.db = db
-
-    def get_all(self, skip: int = 0, limit: int = 100, sort_by: str = None) -> List[Player]:
-        query = self.db.query(Player)
-        
         if sort_by == "points":
             query = query.order_by(Player.points.desc())
         elif sort_by == "price_asc":
@@ -73,99 +46,78 @@ class PlayerRepository:
         elif sort_by == "price_desc":
             query = query.order_by(Player.current_price.desc())
             
-        return query.offset(skip).limit(limit).all()
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
 
-    def get_by_id(self, player_id: int) -> Optional[Player]:
-        return (
-            self.db.query(Player)
-            .filter(Player.id == player_id)
-            .first()
-        )
+    async def get_by_id(self, id: int, options: Optional[List] = None) -> Optional[Player]:
+         # Restore default eager loading
+         if options is None:
+             options = [joinedload(Player.team)]
+         return await self.get(id, options=options)
 
-    def get_by_name(self, name: str) -> Optional[Player]:
-        return (
-            self.db.query(Player)
-            .filter(Player.name == name)
-            .first()
-        )
+    async def get_by_name(self, name: str, options: Optional[List] = None) -> Optional[Player]:
+        query = select(Player).where(Player.name == name)
+        if options:
+            query = query.options(*options)
+        else:
+            query = query.options(joinedload(Player.team))
+        result = await self.db.execute(query)
+        return result.scalars().first()
 
-    def get_by_team(self, team_id: int) -> List[Player]:
-        """Obtener todos los jugadores de un equipo"""
-        return (
-            self.db.query(Player)
-            .filter(Player.team_id == team_id)
-            .all()
-        )
+    async def get_by_team(self, team_id: int, options: Optional[List] = None) -> List[Player]:
+        query = select(Player).where(Player.team_id == team_id)
+        if options:
+            query = query.options(*options)
+        else:
+            query = query.options(joinedload(Player.team))
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
 
-    def get_by_role(self, role: str) -> List[Player]:
-        """Obtener todos los jugadores de un rol específico"""
-        return (
-            self.db.query(Player)
-            .filter(Player.role == role)
-            .all()
-        )
+    async def get_by_role(self, role: str, options: Optional[List] = None) -> List[Player]:
+        query = select(Player).where(Player.role == role)
+        if options:
+            query = query.options(*options)
+        else:
+            query = query.options(joinedload(Player.team))
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
 
-    def get_by_region(self, region: str) -> List[Player]:
-        """Obtener todos los jugadores de una región"""
-        return (
-            self.db.query(Player)
-            .filter(Player.region == region)
-            .all()
-        )
+    async def get_by_region(self, region: str, options: Optional[List] = None) -> List[Player]:
+        query = select(Player).where(Player.region == region)
+        if options:
+            query = query.options(*options)
+        else:
+            query = query.options(joinedload(Player.team))
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
 
-    def get_by_price_range(self, min_price: float, max_price: float) -> List[Player]:
-        """Obtener jugadores en un rango de precio (útil para armado de equipos)"""
-        return (
-            self.db.query(Player)
-            .filter(Player.current_price >= min_price)
-            .filter(Player.current_price <= max_price)
-            .all()
-        )
+    async def get_by_price_range(self, min_price: float, max_price: float, options: Optional[List] = None) -> List[Player]:
+        query = select(Player).where(Player.current_price >= min_price, Player.current_price <= max_price)
+        if options:
+            query = query.options(*options)
+        else:
+            query = query.options(joinedload(Player.team))
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
 
-    def get_top_by_points(self, limit: int = 10) -> List[Player]:
-        """Obtener top jugadores por puntos"""
-        return (
-            self.db.query(Player)
-            .order_by(Player.points.desc())
-            .limit(limit)
-            .all()
-        )
-
-    def create(self, player: Player) -> Player:
-        self.db.add(player)
-        self.db.flush()
-        return player
-
-    def update(self, player_id: int, player_data: dict) -> Player:
-        player = self.get_by_id(player_id)
-        
-        for key, value in player_data.items():
-            if value is not None:
-                setattr(player, key, value)
-        
-        return player
-
-    def delete(self, player: Player) -> None:
-        self.db.delete(player)
+    async def get_top_by_points(self, limit: int = 10, options: Optional[List] = None) -> List[Player]:
+        query = select(Player).order_by(Player.points.desc()).limit(limit)
+        if options:
+            query = query.options(*options)
+        else:
+            query = query.options(joinedload(Player.team))
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
 
 
-class PriceHistoryRepository:
+class PriceHistoryRepository(BaseRepository[PriceHistoryPlayer]):
     '''
-    Repositorio de historial de precios - Capa de acceso a datos.
+    Repositorio de historial de precios - Capa de acceso a datos (Asíncrono).
     '''
-    def __init__(self, db: Session):
-        self.db = db
+    def __init__(self, db: AsyncSession):
+        super().__init__(PriceHistoryPlayer, db)
 
-    def get_by_player(self, player_id: int) -> List[PriceHistoryPlayer]:
-        """Obtener historial de precios de un jugador"""
-        return (
-            self.db.query(PriceHistoryPlayer)
-            .filter(PriceHistoryPlayer.player_id == player_id)
-            .order_by(PriceHistoryPlayer.date.desc())
-            .all()
-        )
-
-    def create(self, price_history: PriceHistoryPlayer) -> PriceHistoryPlayer:
-        self.db.add(price_history)
-        self.db.flush()
-        return price_history
+    async def get_by_player(self, player_id: int) -> List[PriceHistoryPlayer]:
+        query = select(PriceHistoryPlayer).where(PriceHistoryPlayer.player_id == player_id).order_by(PriceHistoryPlayer.date.desc())
+        result = await self.db.execute(query)
+        return list(result.scalars().all())

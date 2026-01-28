@@ -21,7 +21,7 @@ export default function RegisterForm() {
     try {
       await register({ email, username, password });
     } catch (err: any) {
-      setError(err.response?.data?.message || "Error al crear el perfil");
+      setError(err.message || "Error al crear el perfil");
     } finally {
       setIsLoading(false);
     }

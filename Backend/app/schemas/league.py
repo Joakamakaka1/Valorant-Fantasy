@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, Literal
 from datetime import datetime
 from .user import UserBasicOut
@@ -30,88 +30,24 @@ class LeagueMemberBasic(BaseModel):
 # ============================================================================
 
 class LeagueCreate(BaseModel):
-    name: str
-    max_teams: int = 10
-    
-    @field_validator('name')
-    @classmethod
-    def validate_name_length(cls, v: str) -> str:
-        if len(v) < 3:
-            raise ValueError('El nombre de la liga debe tener al menos 3 caracteres')
-        if len(v) > 100:
-            raise ValueError('El nombre de la liga no puede tener más de 100 caracteres')
-        return v
-    
-    @field_validator('max_teams')
-    @classmethod
-    def validate_max_teams(cls, v: int) -> int:
-        if v < 2:
-            raise ValueError('La liga debe permitir al menos 2 equipos')
-        if v > 50:
-            raise ValueError('La liga no puede tener más de 50 equipos')
-        return v
+    name: str = Field(..., min_length=3, max_length=100)
+    max_teams: int = Field(10, ge=2, le=50)
 
 class LeagueUpdate(BaseModel):
-    name: Optional[str] = None
-    max_teams: Optional[int] = None
+    name: Optional[str] = Field(None, min_length=3, max_length=100)
+    max_teams: Optional[int] = Field(None, ge=2, le=50)
     status: Optional[Literal["drafting", "active", "finished"]] = None
-    
-    @field_validator('name')
-    @classmethod
-    def validate_name_length(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None:
-            if len(v) < 3:
-                raise ValueError('El nombre de la liga debe tener al menos 3 caracteres')
-            if len(v) > 100:
-                raise ValueError('El nombre de la liga no puede tener más de 100 caracteres')
-        return v
-    
-    @field_validator('max_teams')
-    @classmethod
-    def validate_max_teams(cls, v: Optional[int]) -> Optional[int]:
-        if v is not None:
-            if v < 2:
-                raise ValueError('La liga debe permitir al menos 2 equipos')
-            if v > 50:
-                raise ValueError('La liga no puede tener más de 50 equipos')
-        return v
 
 class LeagueMemberCreate(BaseModel):
     league_id: int
     user_id: int
-    team_name: str
+    team_name: str = Field(..., min_length=3, max_length=100)
     selected_team_id: Optional[int] = None  # Equipo profesional elegido (da puntos extras)
-    
-    @field_validator('team_name')
-    @classmethod
-    def validate_team_name_length(cls, v: str) -> str:
-        if len(v) < 3:
-            raise ValueError('El nombre del equipo debe tener al menos 3 caracteres')
-        if len(v) > 100:
-            raise ValueError('El nombre del equipo no puede tener más de 100 caracteres')
-        return v
 
 class LeagueMemberUpdate(BaseModel):
-    team_name: Optional[str] = None
-    budget: Optional[float] = None
+    team_name: Optional[str] = Field(None, min_length=3, max_length=100)
+    budget: Optional[float] = Field(None, ge=0)
     selected_team_id: Optional[int] = None  # Cambiar equipo profesional elegido
-    
-    @field_validator('team_name')
-    @classmethod
-    def validate_team_name_length(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None:
-            if len(v) < 3:
-                raise ValueError('El nombre del equipo debe tener al menos 3 caracteres')
-            if len(v) > 100:
-                raise ValueError('El nombre del equipo no puede tener más de 100 caracteres')
-        return v
-    
-    @field_validator('budget')
-    @classmethod
-    def validate_budget(cls, v: Optional[float]) -> Optional[float]:
-        if v is not None and v < 0:
-            raise ValueError('El presupuesto no puede ser negativo')
-        return v
 
 class RosterCreate(BaseModel):
     league_member_id: int
@@ -124,14 +60,7 @@ class RosterUpdate(BaseModel):
     is_starter: Optional[bool] = None
     is_bench: Optional[bool] = None
     role_position: Optional[str] = None
-    total_value_team: Optional[float] = None
-    
-    @field_validator('total_value_team')
-    @classmethod
-    def validate_total_value(cls, v: Optional[float]) -> Optional[float]:
-        if v is not None and v < 0:
-            raise ValueError('El valor total no puede ser negativo')
-        return v
+    total_value_team: Optional[float] = Field(None, ge=0)
 
 # ============================================================================
 # SCHEMAS DE SALIDA (Out)

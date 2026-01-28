@@ -40,18 +40,32 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Interceptor to handle token expiration/auth errors
+// Interceptor to handle standardized responses and errors
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // If it's a standard wrapped success response, unwrap it
+    if (
+      response.data &&
+      typeof response.data === "object" &&
+      response.data.success === true &&
+      "data" in response.data
+    ) {
+      // Modify data in-place so all service calls (return response.data) keep working
+      response.data = response.data.data;
+    }
+    return response;
+  },
   (error) => {
     const status = error.response?.status;
     const url = error.config?.url;
+    // Extract error message from standard format if available
+    const errorData = error.response?.data;
+    const errorMessage =
+      errorData?.error?.message || errorData?.detail || error.message;
 
     if (status === 401) {
       console.warn(`[API 401] Unauthorized access to: ${url}`);
 
-      // Only clear session if we are not already on login/register pages
-      // to avoid breaking the auth flow itself on initial failures
       const isAuthPath =
         typeof window !== "undefined" &&
         (window.location.pathname.includes("/login") ||
@@ -61,11 +75,11 @@ api.interceptors.response.use(
         console.error("Session expired or invalid token. Clearing storage.");
         localStorage.removeItem("token");
         localStorage.removeItem("user");
-
-        // Optional: Trigger a redirect or event
-        // window.location.href = "/login";
       }
     }
+
+    // Attach human readable message to the error object for easier handling in components
+    error.message = errorMessage;
     return Promise.reject(error);
   },
 );

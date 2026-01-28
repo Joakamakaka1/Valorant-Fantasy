@@ -49,10 +49,17 @@ class Settings:
     @property
     def database_url(self) -> str:
         '''
-        Construye la URL de conexión a MySQL dinámicamente.
-        Formato: mysql+mysqlconnector://usuario:password@host:puerto/database
+        Construye la URL de conexión a MySQL dinámicamente (Síncrona).
         '''
         return f"mysql+mysqlconnector://{self.MYSQL_USER}:{self.MYSQL_PASSWORD}@{self.MYSQL_HOST}:{self.MYSQL_PORT}/{self.MYSQL_DB}"
+    
+    @property
+    def async_database_url(self) -> str:
+        '''
+        Construye la URL de conexión a MySQL para drivers asíncronos.
+        Formato: mysql+asyncmy://usuario:password@host:puerto/database
+        '''
+        return f"mysql+asyncmy://{self.MYSQL_USER}:{self.MYSQL_PASSWORD}@{self.MYSQL_HOST}:{self.MYSQL_PORT}/{self.MYSQL_DB}"
     
     # CORS
     @property
