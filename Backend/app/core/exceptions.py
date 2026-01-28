@@ -19,6 +19,25 @@ class AppError(Exception):
         super().__init__(self.message)
 
 # ============================================================================
+# EXCEPCIONES DE NEGOCIO
+# ============================================================================
+
+class AlreadyExistsException(AppError):
+    """
+    Excepción para cuando se intenta crear un registro duplicado.
+    
+    Se lanza cuando una restricción UNIQUE es violada en la base de datos.
+    Esto permite que los controladores FastAPI devuelvan 400 en lugar de 500.
+    """
+    def __init__(self, resource: str, details: dict = None):
+        super().__init__(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="ALREADY_EXISTS",
+            message=f"El {resource} ya existe. No se permiten duplicados.",
+            details=details or {}
+        )
+
+# ============================================================================
 # MANEJADORES DE ERRORES PERSONALIZADOS
 # ============================================================================
 

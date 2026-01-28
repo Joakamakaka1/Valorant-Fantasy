@@ -2,7 +2,12 @@ from typing import Generic, TypeVar, Type, Optional, List, Any, Union, Dict
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete
 from sqlalchemy.orm import selectinload, joinedload
+from sqlalchemy.exc import IntegrityError
 from app.db.base import Base
+from app.core.exceptions import AlreadyExistsException
+import logging
+
+logger = logging.getLogger(__name__)
 
 ModelType = TypeVar("ModelType", bound=Base)
 
@@ -34,15 +39,74 @@ class BaseRepository(Generic[ModelType]):
         return list(result.scalars().all())
 
     async def create(self, obj_in: ModelType, refresh: bool = True, options: Optional[List[Any]] = None) -> ModelType:
-        self.db.add(obj_in)
-        await self.db.flush()
-        if refresh:
-            await self.db.refresh(obj_in)
-            if options:
-                # If options are provided, re-fetch with those options to ensure relationships are loaded
-                # This replaces the need for manual populate_existing workarounds in simple cases
-                return await self.get(obj_in.id, options=options)
-        return obj_in
+        """
+        Crea un nuevo registro en la base de datos.
+        
+        Args:
+            obj_in: Instancia del modelo a crear
+            refresh: Si es True, recarga el objeto desde la BD después de crearlo
+            options: Opciones de carga para relaciones (ej: selectinload)
+        
+        Returns:
+            ModelType: El objeto creado
+            
+        Raises:
+            AlreadyExistsException: Si ya existe un registro que viola una restricción UNIQUE
+        
+        Example:
+            try:
+                new_member = await league_member_repo.create(LeagueMember(...))
+            except AlreadyExistsException as e:
+                # El usuario ya está en esta liga
+                return {"error": "Usuario ya está en la liga"}
+        """
+        try:
+            self.db.add(obj_in)
+            await self.db.flush()
+            if refresh:
+                await self.db.refresh(obj_in)
+                if options:
+                    # If options are provided, re-fetch with those options to ensure relationships are loaded
+                    # This replaces the need for manual populate_existing workarounds in simple cases
+                    return await self.get(obj_in.id, options=options)
+            return obj_in
+        except IntegrityError as e:
+            # Rollback para limpiar la sesión asíncrona
+            await self.db.rollback()
+            
+            # Extraer información del error
+            error_msg = str(e.orig) if hasattr(e, 'orig') else str(e)
+            
+            # Determinar qué constraint fue violada
+            constraint_name = "desconocida"
+            if "uq_league_user" in error_msg:
+                constraint_name = "usuario en liga"
+                details = {"constraint": "uq_league_user", "message": "El usuario ya está en esta liga"}
+            elif "uq_roster_player" in error_msg:
+                constraint_name = "jugador en roster"
+                details = {"constraint": "uq_roster_player", "message": "El jugador ya está en este roster"}
+            elif "uq_player_match_stats" in error_msg:
+                constraint_name = "estadísticas de jugador"
+                details = {"constraint": "uq_player_match_stats", "message": "Las estadísticas de este jugador en este partido ya existen"}
+            elif "Duplicate entry" in error_msg or "UNIQUE constraint" in error_msg:
+                constraint_name = "registro"
+                details = {"message": "Ya existe un registro con estos datos"}
+            else:
+                # Otro tipo de IntegrityError (FK, NOT NULL, etc.)
+                logger.error(f"IntegrityError no relacionado con duplicados: {error_msg}")
+                raise  # Re-lanzar para que sea manejado por el handler global
+            
+            # Loggear advertencia
+            logger.warning(
+                f"Intento de insertar duplicado en {self.model.__tablename__}: {constraint_name}. "
+                f"Error: {error_msg}"
+            )
+            
+            # Lanzar excepción personalizada
+            raise AlreadyExistsException(
+                resource=self.model.__tablename__,
+                details=details
+            )
 
     async def get_by_fields(
         self, 

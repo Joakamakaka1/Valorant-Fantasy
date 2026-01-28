@@ -79,12 +79,46 @@ class PlayerService:
 
     async def get_by_role(self, role: str) -> List[Player]:
         return await self.repo.get_by_role(role, options=[joinedload(Player.team)])
+    
+    async def get_by_region(self, region: str) -> List[Player]:
+        return await self.repo.get_by_region(region, options=[joinedload(Player.team)])
 
     async def get_by_price_range(self, min_price: float, max_price: float) -> List[Player]:
         return await self.repo.get_by_price_range(min_price, max_price, options=[joinedload(Player.team)])
 
     async def get_top_by_points(self, limit: int = 10) -> List[Player]:
         return await self.repo.get_top_by_points(limit, options=[joinedload(Player.team)])
+    
+    async def get_players_with_filters(
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        team_id: Optional[int] = None,
+        role: Optional[str] = None,
+        region: Optional[str] = None,
+        min_price: Optional[float] = None,
+        max_price: Optional[float] = None,
+        top: Optional[int] = None,
+        sort_by: Optional[str] = None
+    ) -> List[Player]:
+        """
+        Método helper para obtener jugadores con filtros múltiples.
+        
+        Centraliza la lógica de filtrado que antes estaba en el endpoint.
+        Prioridad: top > team_id > role > region > price_range > paginación con sort
+        """
+        if top:
+            return await self.get_top_by_points(limit=top)
+        if team_id:
+            return await self.get_by_team(team_id)
+        if role:
+            return await self.get_by_role(role)
+        if region:
+            return await self.get_by_region(region)
+        if min_price is not None and max_price is not None:
+            return await self.get_by_price_range(min_price, max_price)
+        
+        return await self.get_all(skip=skip, limit=limit, sort_by=sort_by)
 
     @transactional
     async def create(self, *, name: str, role: str, region: str, team_id: Optional[int] = None,

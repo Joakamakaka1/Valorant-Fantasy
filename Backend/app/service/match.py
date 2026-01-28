@@ -43,6 +43,32 @@ class MatchService:
 
     async def get_recent(self, days: int = 7) -> List[Match]:
         return await self.repo.get_recent(days, options=self._get_match_options())
+    
+    async def get_matches_with_filters(
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        status_filter: Optional[str] = None,
+        team_id: Optional[int] = None,
+        unprocessed: bool = False,
+        recent_days: Optional[int] = None
+    ) -> List[Match]:
+        """
+        Método helper para obtener partidos con filtros múltiples.
+        
+        Centraliza la lógica de filtrado que antes estaba en el endpoint.
+        Prioridad: unprocessed > status_filter > team_id > recent_days > paginación
+        """
+        if unprocessed:
+            return await self.get_unprocessed()
+        if status_filter:
+            return await self.get_by_status(status_filter)
+        if team_id:
+            return await self.get_by_team(team_id)
+        if recent_days:
+            return await self.get_recent(days=recent_days)
+        
+        return await self.get_all(skip=skip, limit=limit)
 
     @transactional
     async def create(self, *, vlr_match_id: str, date=None, status: str = "upcoming",

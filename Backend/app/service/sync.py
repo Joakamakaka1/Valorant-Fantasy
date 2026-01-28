@@ -10,6 +10,7 @@ from app.service.professional import TeamService, PlayerService
 from app.service.match import MatchService, PlayerMatchStatsService
 from app.core.config import settings
 from app.core.decorators import transactional
+from app.core.exceptions import AlreadyExistsException
 from datetime import datetime, timedelta
 import re
 import logging
@@ -112,36 +113,69 @@ class SyncService:
                     })
 
                 # 4. Procesar Jugadores y Estadísticas
+                # IMPORTANTE: Manejar duplicados a nivel de constraint
+                stats_created = 0
+                stats_skipped = 0
+                
                 for p_stats in details["players"]:
-                    current_team = team_models[0] if p_stats["team_index"] == 0 else team_models[1]
-                    
-                    player = await self.player_service.repo.get_by_name(p_stats["name"])
-                    if not player:
-                        player = await self.player_service.create(
-                            name=p_stats["name"], role=self.infer_role(p_stats["agent"]),
-                            region=event["region"], team_id=current_team.id,
-                            base_price=10.0, current_price=10.0
-                        )
-                    elif not player.team_id:
-                        await self.player_service.update(player.id, {"team_id": current_team.id})
-
-                    if status == "completed":
-                        # Limpiar stats previas
-                        q_del = delete(PlayerMatchStats).where(
-                            PlayerMatchStats.match_id == existing_match.id,
-                            PlayerMatchStats.player_id == player.id
-                        )
-                        await self.db.execute(q_del)
+                    try:
+                        current_team = team_models[0] if p_stats["team_index"] == 0 else team_models[1]
                         
-                        await self.stats_service.create(
-                            match_id=existing_match.id, player_id=player.id,
-                            agent=p_stats["agent"], kills=p_stats["kills"],
-                            death=p_stats["deaths"], assists=p_stats["assists"],
-                            acs=p_stats["acs"], adr=p_stats["adr"],
-                            hs_percent=p_stats["hs_percent"], rating=p_stats["rating"],
-                            first_kills=p_stats["first_kills"], first_deaths=p_stats["first_deaths"],
-                            clutches_won=0 
+                        player = await self.player_service.repo.get_by_name(p_stats["name"])
+                        if not player:
+                            try:
+                                player = await self.player_service.create(
+                                    name=p_stats["name"], role=self.infer_role(p_stats["agent"]),
+                                    region=event["region"], team_id=current_team.id,
+                                    base_price=10.0, current_price=10.0
+                                )
+                            except AlreadyExistsException:
+                                # Otro proceso ya creó este jugador, intentar obtenerlo de nuevo
+                                logger.warning(f"Jugador '{p_stats['name']}' creado por otro proceso, re-fetching...")
+                                player = await self.player_service.repo.get_by_name(p_stats["name"])
+                                if not player:
+                                    logger.error(f"No se pudo obtener jugador '{p_stats['name']}' después de conflicto")
+                                    continue
+                        elif not player.team_id:
+                            await self.player_service.update(player.id, {"team_id": current_team.id})
+
+                        if status == "completed":
+                            try:
+                                # Crear estadísticas del jugador
+                                # Si ya existen (constraint uq_player_match_stats), se lanzará AlreadyExistsException
+                                await self.stats_service.create(
+                                    match_id=existing_match.id, player_id=player.id,
+                                    agent=p_stats["agent"], kills=p_stats["kills"],
+                                    death=p_stats["deaths"], assists=p_stats["assists"],
+                                    acs=p_stats["acs"], adr=p_stats["adr"],
+                                    hs_percent=p_stats["hs_percent"], rating=p_stats["rating"],
+                                    first_kills=p_stats["first_kills"], first_deaths=p_stats["first_deaths"],
+                                    clutches_won=0 
+                                )
+                                stats_created += 1
+                            except AlreadyExistsException as e:
+                                # Las stats ya existen (otro proceso o ejecución previa)
+                                # Continuar con el siguiente jugador sin interrumpir
+                                logger.warning(
+                                    f"Stats ya existen para player_id={player.id} en match_id={existing_match.id}. "
+                                    f"Saltando inserción. Detalle: {e.details.get('message', 'N/A')}"
+                                )
+                                stats_skipped += 1
+                                continue  # Siguiente jugador
+                    
+                    except Exception as e:
+                        # Cualquier otro error no relacionado con duplicados
+                        logger.error(
+                            f"Error inesperado procesando jugador '{p_stats.get('name', 'UNKNOWN')}': {type(e).__name__} - {str(e)}"
                         )
+                        continue  # Continuar con el siguiente jugador
+
+                # Log de resumen de stats procesadas
+                if status == "completed":
+                    logger.info(
+                        f"Match {existing_match.vlr_match_id}: Stats creadas={stats_created}, "
+                        f"Stats ya existentes={stats_skipped}"
+                    )
 
                 if status == "completed":
                     await self.match_service.mark_as_processed(existing_match.id)
