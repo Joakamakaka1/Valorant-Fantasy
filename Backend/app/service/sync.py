@@ -24,6 +24,11 @@ logger = logging.getLogger(__name__)
 from app.service.vlr_scraper import VLRScraper
 
 class SyncService:
+    """
+    Servicio encargado de la sincronización de datos con fuentes externas (VLR.gg).
+    Maneja la actualización de partidos, estadísticas de jugadores, precios de mercado
+    y puntuaciones de las ligas de fantasía.
+    """
     def __init__(self, db: AsyncSession, redis: Optional[RedisCache] = None):
         self.db = db
         self.redis = redis
@@ -46,7 +51,12 @@ class SyncService:
             return []
 
     async def sync_vct_kickoff_comprehensive(self):
-        """Sincronización exhaustiva (Asíncrono)"""
+        """
+        Sincronización exhaustiva de eventos VCT Kickoff.
+        
+        Itera sobre los eventos de Kickoff definidos para 2026, obtiene las URLs de los partidos,
+        y procesa cada partido individualmente. Incluye lógica de throttling para no saturar el scrapping.
+        """
         events = [
             {"path": "/event/matches/2682/vct-2026-americas-kickoff", "name": "VCT 2026: Americas Kickoff", "region": "Americas"},
             {"path": "/event/matches/2684/vct-2026-emea-kickoff", "name": "VCT 2026: EMEA Kickoff", "region": "EMEA"},
@@ -60,6 +70,7 @@ class SyncService:
             match_urls = await self.scraper.get_match_urls_from_event(event["path"])
             
             for match_url in match_urls:
+                # Respetar rate limits del servidor externo
                 logger.info(f"Throttling: Waiting 1.5s...")
                 await asyncio.sleep(1.5)
 
@@ -68,6 +79,7 @@ class SyncService:
                 vlr_id = parts[1] if parts[0] == "match" else parts[0]
                 if not vlr_id.isdigit(): continue
                 
+                # Verificar si ya tenemos este partido procesado correctamente
                 existing_match = await self.match_service.repo.get_by_vlr_match_id(vlr_id)
                 if existing_match and existing_match.is_processed:
                     continue
@@ -96,7 +108,7 @@ class SyncService:
                             m = await self.match_service.repo.get_by_vlr_match_id(vlr_id)
                             if m:
                                 await self.redis.delete(f"stats:match:{m.id}")
-                                logger.info(f"🗑️  Caché de estadísticas invalidada para partido {m.id} (status: {old_status} -> {new_status})")
+                                logger.info(f"Caché de estadísticas invalidada para partido {m.id} (status: {old_status} -> {new_status})")
 
                 except Exception as e:
                     logger.error(f"Error procesando partido {vlr_id}: {e}")
@@ -106,11 +118,11 @@ class SyncService:
 
     @transactional
     async def _sync_match_details(self, vlr_id: str, event: Dict[str, Any], details: Dict[str, Any], existing_match: Optional[Match]):
-        """Procesa los detalles de un partido dentro de una transacción."""
+        """Procesa los detalles de un partido dentro de una transacción garantizando consistencia."""
         has_stats = any(p["kills"] > 0 or p["rating"] > 0 for p in details["players"])
         status = "completed" if has_stats else "upcoming"
 
-        # 2. Procesar Equipos
+        # 2. Procesar Equipos: asegurar que existen en la DB
         team_models = []
         for t_info in details["teams"]:
             team = await self.team_service.repo.get_by_name(t_info["name"])
@@ -124,7 +136,7 @@ class SyncService:
 
         if len(team_models) < 2: return
 
-        # 3. Procesar Partido
+        # 3. Procesar Partido: Crear o Actualizar
         if not existing_match:
             existing_match = await self.match_service.create(
                 vlr_match_id=vlr_id, status=status,
@@ -153,6 +165,7 @@ class SyncService:
             try:
                 current_team = team_models[0] if p_stats["team_index"] == 0 else team_models[1]
                 
+                # Buscar o crear jugador, asignando el equipo correcto
                 player = await self.player_service.repo.get_by_name(p_stats["name"])
                 if not player:
                     try:
@@ -167,6 +180,7 @@ class SyncService:
                 elif not player.team_id:
                     await self.player_service.update(player.id, {"team_id": current_team.id})
 
+                # Crear estadísticas si el partido terminó
                 if status == "completed":
                     try:
                         await self.stats_service.create(
@@ -190,13 +204,14 @@ class SyncService:
             logger.info(f"Match {existing_match.vlr_match_id}: Stats creadas={stats_created}, Skipped={stats_skipped}")
             await self.match_service.mark_as_processed(existing_match.id)
             
-            # Recargar con relaciones para actualización global
+            # Recargar con relaciones para actualización global de stats/puntos
             q = select(Match).where(Match.id == existing_match.id).options(
                 selectinload(Match.player_stats).selectinload(PlayerMatchStats.player)
             )
             res = await self.db.execute(q)
             match_with_stats = res.scalar_one()
             
+            # Actualizar puntos y precios de los jugadores involucrados
             await self.update_player_global_stats(match_with_stats)
 
     async def sync_kickoff_2026(self):
@@ -231,7 +246,7 @@ class SyncService:
         # Al final de actualizar todos los jugadores de un partido, invalidamos la caché global de jugadores
         if self.redis:
             await self.redis.delete("all_players_cache")
-            logger.info("🗑️  Caché 'all_players_cache' invalidada después de actualización global de precios")
+            logger.info("Caché 'all_players_cache' invalidada después de actualización global de precios")
 
     async def recalculate_league_members_points_for_match(self, match: Match):
         """Recalcula puntos de miembros de liga (Asíncrono)"""
@@ -259,7 +274,7 @@ class SyncService:
             await self.record_user_history(member.user_id)
 
     async def record_user_history(self, user_id: int):
-        """Instantánea de historial (Asíncrono)"""
+        """Instantánea de historial de puntos del usuario (Asíncrono)"""
         q_total = select(func.sum(LeagueMember.total_points)).where(LeagueMember.user_id == user_id)
         res_total = await self.db.execute(q_total)
         total_points = res_total.scalar() or 0.0
@@ -312,7 +327,7 @@ class SyncService:
 
     @transactional
     async def recalibrate_all_prices(self):
-        """Recalibra PUNTOS y PRECIOS (Asíncrono)"""
+        """Recalibra PUNTOS y PRECIOS para todos los jugadores basado en todo el historial"""
         q_all_stats = select(PlayerMatchStats)
         res_all_stats = await self.db.execute(q_all_stats)
         all_stats = res_all_stats.scalars().all()

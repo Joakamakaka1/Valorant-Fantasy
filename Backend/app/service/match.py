@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 class MatchService:
     '''
     Servicio que maneja la lógica de negocio de partidos (Asíncrono).
+    Se encarga de crear, actualizar, obtener y borrar partidos, además de gestionar las consultas con filtros.
     '''
     def __init__(self, db: AsyncSession, redis: Optional[RedisCache] = None):
         self.db = db
@@ -23,6 +24,7 @@ class MatchService:
         self.redis = redis
 
     def _get_match_options(self):
+        # Opciones de carga ansiosa (Eager Loading) para optimizar consultas de partidos
         return [
             joinedload(Match.team_a),
             joinedload(Match.team_b),
@@ -42,12 +44,14 @@ class MatchService:
         return await self.repo.get_by_status(status, options=self._get_match_options())
 
     async def get_unprocessed(self) -> List[Match]:
+        # Obtiene partidos completados que aún no se han procesado (cálculo de puntos)
         return await self.repo.get_unprocessed()
 
     async def get_by_team(self, team_id: int) -> List[Match]:
         return await self.repo.get_by_team(team_id, options=self._get_match_options())
 
     async def get_recent(self, days: int = 7) -> List[Match]:
+        # Obtiene partidos de los últimos N días
         return await self.repo.get_recent(days, options=self._get_match_options())
     
     async def get_matches_with_filters(
@@ -82,6 +86,8 @@ class MatchService:
                vlr_url: Optional[str] = None, format: Optional[str] = None,
                team_a_id: Optional[int] = None, team_b_id: Optional[int] = None,
                score_team_a: int = 0, score_team_b: int = 0) -> Match:
+        
+        # Validación de duplicados por ID de VLR
         if await self.repo.get_by_vlr_match_id(vlr_match_id):
             raise AppError(409, ErrorCode.DUPLICATED, f"El partido con ID {vlr_match_id} ya existe")
         
@@ -102,6 +108,7 @@ class MatchService:
 
     @transactional
     async def mark_as_processed(self, match_id: int) -> Match:
+        # Marca un partido como procesado para evitar recálculos innecesarios
         match = await self.repo.get(match_id)
         if not match:
             raise AppError(404, ErrorCode.NOT_FOUND, "El partido no existe")
@@ -117,7 +124,7 @@ class PlayerMatchStatsService:
     '''
     Servicio que maneja la lógica de negocio de estadísticas de jugadores (Asíncrono).
     
-    Implementa caché con TTL para estadísticas de partidos (datos inmutables).
+    Implementa caché con TTL para estadísticas de partidos (datos inmutables una vez procesados).
     '''
     CACHE_KEY_PREFIX = "stats:match:"
     CACHE_TTL_SECONDS = 86400  # 24 horas
@@ -131,7 +138,7 @@ class PlayerMatchStatsService:
         """
         Obtiene estadísticas de un partido con caché (TTL 24h).
         
-        Partidos completados son inmutables, por lo que la caché es efectiva.
+        Partidos completados son inmutables, por lo que la caché es efectiva y reduce carga en la DB.
         """
         cache_key = f"{self.CACHE_KEY_PREFIX}{match_id}"
         
@@ -140,11 +147,11 @@ class PlayerMatchStatsService:
             cached_response = await self.redis.get(cache_key)
             if cached_response and "success" in cached_response:
                 stats_data = cached_response.get("data", [])
-                logger.info(f"🟢 CACHE_HIT: Stats for match {match_id} found in Redis ({len(stats_data)} players)")
+                logger.info(f"CACHE_HIT: Stats for match {match_id} found in Redis ({len(stats_data)} players)")
                 return stats_data
         
         # Caché miss o Redis no disponible: consultar DB
-        logger.info(f"🔴 CACHE_MISS: Fetching stats for match {match_id} from database")
+        logger.info(f"CACHE_MISS: Fetching stats for match {match_id} from database")
         stats = await self.repo.get_by_match(match_id, options=[joinedload(PlayerMatchStats.player)])
         
         # Guardar en caché con TTL de 24 horas
@@ -166,6 +173,10 @@ class PlayerMatchStatsService:
         return await self.repo.get_by_player_recent(player_id, limit, options=[joinedload(PlayerMatchStats.player)])
 
     async def calculate_fantasy_points(self, stats: PlayerMatchStats, match: Match = None) -> float:
+        """
+        Calcula los puntos de fantasía para un jugador en un partido específico.
+        Incluye bonificaciones por victoria, sweep, y desempeño individual.
+        """
         points = 0.0
         
         # 1. ESTADÍSTICAS INDIVIDUALES
@@ -184,6 +195,8 @@ class PlayerMatchStatsService:
         
         # 2. BONUS POR RESULTADO
         if match and match.status == "completed":
+            # Nota: Import local para evitar circular dependencies si fuera necesario, 
+            # aunque aquí parece que Player es usado solo para la consulta
             from app.db.models.professional import Player
             query = select(Player).where(Player.id == stats.player_id)
             result = await self.db.execute(query)
@@ -233,6 +246,7 @@ class PlayerMatchStatsService:
         match_repo = MatchRepository(self.db)
         match = await match_repo.get_by_id(match_id)
         
+        # Calcula puntos al crear la estadística
         stats.fantasy_points_earned = await self.calculate_fantasy_points(stats, match)
         
         # Use options to ensure player is loaded if we return it in response (typically stats out includes player)
@@ -242,7 +256,7 @@ class PlayerMatchStatsService:
         if self.redis:
             cache_key = f"{self.CACHE_KEY_PREFIX}{match_id}"
             await self.redis.delete(cache_key)
-            logger.info(f"🗑️  Cache invalidated for match {match_id} after stats creation")
+            logger.info(f"Cache invalidated for match {match_id} after stats creation")
         
         return created_stats
 
@@ -257,7 +271,7 @@ class PlayerMatchStatsService:
         match_repo = MatchRepository(self.db)
         match = await match_repo.get_by_id(updated_stats.match_id)
         
-        # Recalculate points
+        # Recalcular puntos al actualizar
         new_points = await self.calculate_fantasy_points(updated_stats, match)
         if new_points != updated_stats.fantasy_points_earned:
              updated_stats = await self.repo.update(stats_id, {"fantasy_points_earned": new_points}, options=[joinedload(PlayerMatchStats.player)])

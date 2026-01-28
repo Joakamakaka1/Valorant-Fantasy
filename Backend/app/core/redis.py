@@ -44,11 +44,11 @@ class RedisCache:
                 # Test de conexión
                 await self._client.ping()
                 self._connected = True
-                logger.info("✅ Redis connection established successfully")
+                logger.info("Redis connection established successfully")
                 return True
             except (ConnectionError, TimeoutError, RedisError) as e:
-                logger.error(f"❌ Redis connection failed: {type(e).__name__} - {str(e)}")
-                logger.warning("⚠️  Graceful degradation: Application will fallback to database")
+                logger.error(f"Redis connection failed: {type(e).__name__} - {str(e)}")
+                logger.warning("Graceful degradation: Application will fallback to database")
                 self._connected = False
                 self._client = None
                 return False
@@ -75,16 +75,16 @@ class RedisCache:
         try:
             value = await self._client.get(key)
             if value is None:
-                logger.info(f"🔴 CACHE_MISS: {key}")
+                logger.info(f"CACHE_MISS: {key}")
                 return None
             
             # Deserializar JSON
             data = json.loads(value) if isinstance(value, str) else value
-            logger.info(f"🟢 CACHE_HIT: {key}")
+            logger.info(f"CACHE_HIT: {key}")
             return data
         
         except (RedisError, json.JSONDecodeError) as e:
-            logger.error(f"❌ Redis GET error for key '{key}': {type(e).__name__} - {str(e)}")
+            logger.error(f"Redis GET error for key '{key}': {type(e).__name__} - {str(e)}")
             return None
     
     async def set(self, key: str, value: dict, ttl: Optional[int] = None) -> bool:
@@ -101,7 +101,7 @@ class RedisCache:
         """
         if not await self._ensure_connection():
             # Redis no disponible, no cachear (no es fatal)
-            logger.debug(f"⚠️  Cannot cache key '{key}': Redis unavailable")
+            logger.debug(f"Cannot cache key '{key}': Redis unavailable")
             return False
         
         try:
@@ -110,15 +110,15 @@ class RedisCache:
             
             if ttl:
                 await self._client.setex(key, ttl, serialized)
-                logger.debug(f"💾 CACHE_SET: {key} (TTL: {ttl}s)")
+                logger.debug(f"CACHE_SET: {key} (TTL: {ttl}s)")
             else:
                 await self._client.set(key, serialized)
-                logger.debug(f"💾 CACHE_SET: {key} (No TTL)")
+                logger.debug(f"CACHE_SET: {key} (No TTL)")
             
             return True
         
         except (RedisError, TypeError, json.JSONEncodeError) as e:
-            logger.error(f"❌ Redis SET error for key '{key}': {type(e).__name__} - {str(e)}")
+            logger.error(f"Redis SET error for key '{key}': {type(e).__name__} - {str(e)}")
             return False
     
     async def delete(self, key: str) -> bool:
@@ -132,19 +132,19 @@ class RedisCache:
             True si se eliminó o no existía, False si hubo error
         """
         if not await self._ensure_connection():
-            logger.debug(f"⚠️  Cannot delete key '{key}': Redis unavailable")
+            logger.debug(f"Cannot delete key '{key}': Redis unavailable")
             return False
         
         try:
             deleted = await self._client.delete(key)
             if deleted > 0:
-                logger.info(f"🗑️  CACHE_DELETE: {key}")
+                logger.info(f"CACHE_DELETE: {key}")
             else:
-                logger.debug(f"🔍 CACHE_DELETE (not found): {key}")
+                logger.debug(f"CACHE_DELETE (not found): {key}")
             return True
         
         except RedisError as e:
-            logger.error(f"❌ Redis DELETE error for key '{key}': {type(e).__name__} - {str(e)}")
+            logger.error(f"Redis DELETE error for key '{key}': {type(e).__name__} - {str(e)}")
             return False
     
     async def delete_by_prefix(self, prefix: str) -> int:
@@ -158,7 +158,7 @@ class RedisCache:
             Número de claves eliminadas, 0 si hubo error o no hay claves
         """
         if not await self._ensure_connection():
-            logger.debug(f"⚠️  Cannot delete by prefix '{prefix}*': Redis unavailable")
+            logger.debug(f"Cannot delete by prefix '{prefix}*': Redis unavailable")
             return 0
         
         try:
@@ -169,16 +169,16 @@ class RedisCache:
                 keys.append(key)
             
             if not keys:
-                logger.debug(f"🔍 CACHE_DELETE_PREFIX (no keys found): {prefix}*")
+                logger.debug(f"CACHE_DELETE_PREFIX (no keys found): {prefix}*")
                 return 0
             
             # Eliminar en batch
             deleted = await self._client.delete(*keys)
-            logger.info(f"🗑️  CACHE_DELETE_PREFIX: {prefix}* ({deleted} keys deleted)")
+            logger.info(f"CACHE_DELETE_PREFIX: {prefix}* ({deleted} keys deleted)")
             return deleted
         
         except RedisError as e:
-            logger.error(f"❌ Redis DELETE_PREFIX error for '{prefix}*': {type(e).__name__} - {str(e)}")
+            logger.error(f"Redis DELETE_PREFIX error for '{prefix}*': {type(e).__name__} - {str(e)}")
             return 0
     
     async def close(self):
@@ -186,9 +186,9 @@ class RedisCache:
         if self._client:
             try:
                 await self._client.close()
-                logger.info("👋 Redis connection closed")
+                logger.info("Redis connection closed")
             except RedisError as e:
-                logger.error(f"❌ Error closing Redis connection: {type(e).__name__} - {str(e)}")
+                logger.error(f"Error closing Redis connection: {type(e).__name__} - {str(e)}")
             finally:
                 self._client = None
                 self._connected = False

@@ -10,9 +10,11 @@ import { DashboardOverview } from "@/lib/types";
 import { LoadingState } from "@/components/shared/loading-state";
 
 export default function DashboardPage() {
+  // Estado para almacenar los datos generales del dashboard (puntos, ranking, ligas)
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Carga inicial de datos al montar el componente
   useEffect(() => {
     async function loadDashboardData() {
       try {
@@ -27,11 +29,12 @@ export default function DashboardPage() {
     loadDashboardData();
   }, []);
 
+  // Configuración de las tarjetas estadísticas mostradas en la parte superior
   const stats = [
     {
       title: "Total Points",
       value: overview?.total_points.toFixed(1) || "0.0",
-      change: "+0.0%", // Todo: calculate from history
+      change: "+0.0%", // Todo: calcular cambio basado en historial
       trend: "up" as const,
       description: "Aggregate points from all leagues",
       footer: "Updated live",
@@ -62,7 +65,7 @@ export default function DashboardPage() {
     },
   ];
 
-  // Transform internal progression for the chart
+  // Transformar datos del historial para el gráfico interactivo
   const progressionData =
     overview?.points_history.map((item) => ({
       time: new Date(item.recorded_at).toLocaleDateString([], {
@@ -70,7 +73,7 @@ export default function DashboardPage() {
         day: "numeric",
       }),
       desktop: item.total_points,
-      mobile: 0, // Not used yet
+      mobile: 0, // Reservado para vista móvil si fuera necesario
     })) || [];
 
   return (
@@ -81,7 +84,10 @@ export default function DashboardPage() {
           <LoadingState message="BOOTING SYSTEM OVERVIEW..." fullPage />
         ) : (
           <>
+            {/* Tarjetas de estadísticas principales */}
             <SectionCards stats={stats} />
+
+            {/* Gráfico de evolución de puntos */}
             <div className="px-4 md:px-6">
               <ChartAreaInteractive data={progressionData} />
             </div>
