@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 from typing import List, Optional
 from app.db.models.league import League, LeagueMember, Roster
 from app.db.models.professional import Player
@@ -9,6 +9,7 @@ from app.core.constants import ErrorCode
 from app.core.decorators import transactional
 from app.repository.league import LeagueRepository, LeagueMemberRepository, RosterRepository
 from app.repository.professional import PlayerRepository
+
 import uuid
 
 class LeagueService:
@@ -42,19 +43,24 @@ class LeagueService:
         invite_code = str(uuid.uuid4())[:8].upper()
         while await self.repo.get_by_invite_code(invite_code):
             invite_code = str(uuid.uuid4())[:8].upper()
-        
+
         league = League(
-            name=name, admin_user_id=admin_user_id,
-            invite_code=invite_code, max_teams=max_teams
+            name=name, 
+            admin_user_id=admin_user_id,
+            invite_code=invite_code, 
+            max_teams=max_teams
         )
-        created_league = await self.repo.create(league)
+        
+        created_league = await self.repo.create(league, options=[joinedload(League.admin_user)])
         
         member_repo = LeagueMemberRepository(self.db)
         member = LeagueMember(
-            league_id=created_league.id, user_id=admin_user_id,
-            team_name=f"Equipo de {name}", budget=200.0, is_admin=True
+            league_id=created_league.id, 
+            user_id=admin_user_id,
+            team_name=f"Equipo de {name}", 
+            budget=200.0, 
+            is_admin=True
         )
-        # We need to eager load user here too if it's returned, but usually create_league just returns the league
         await member_repo.create(member)
         
         return created_league
@@ -67,7 +73,6 @@ class LeagueService:
 
     @transactional
     async def delete(self, league_id: int) -> None:
-        # BaseRepository delete expects ID
         if not await self.repo.delete(league_id):
              raise AppError(404, ErrorCode.NOT_FOUND, "La liga no existe")
 
@@ -104,7 +109,7 @@ class LeagueMemberService:
 
     @transactional
     async def join_league(self, *, league_id: int, user_id: int, team_name: str, 
-                   selected_team_id: Optional[int] = None) -> LeagueMember:
+                         selected_team_id: Optional[int] = None) -> LeagueMember:
         league = await self.league_repo.get(league_id)
         if not league:
             raise AppError(404, ErrorCode.NOT_FOUND, "La liga no existe")
@@ -121,7 +126,6 @@ class LeagueMemberService:
             selected_team_id=selected_team_id, budget=150.0, is_admin=False
         )
         
-        # Use BaseRepository create with options to handle the refresh
         return await self.repo.create(member, options=[joinedload(LeagueMember.user)])
 
     @transactional

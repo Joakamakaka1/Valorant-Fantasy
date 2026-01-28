@@ -104,7 +104,8 @@ class PlayerService:
                 return players_data
         
         # Caché miss o Redis no disponible: consultar DB
-        logger.info(f"CACHE_MISS: Fetching all players from database")        players = await self.repo.get_all(skip=0, limit=10000, sort_by=sort_by, options=[joinedload(Player.team)])
+        logger.info(f"CACHE_MISS: Fetching all players from database")        
+        players = await self.repo.get_all(skip=0, limit=10000, sort_by=sort_by, options=[joinedload(Player.team)])
         
         # Guardar en caché (sin TTL, datos casi estáticos)
         if self.redis and players:

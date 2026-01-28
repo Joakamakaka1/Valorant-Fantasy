@@ -18,7 +18,7 @@ router = APIRouter(prefix="/leagues", tags=["Leagues"])
 # LEAGUES ENDPOINTS
 # ============================================================================
 
-@router.get("/", response_model=StandardResponse[List[LeagueOut]], status_code=status.HTTP_200_OK)
+@router.get("", response_model=StandardResponse[List[LeagueOut]], status_code=status.HTTP_200_OK)
 async def get_all_leagues(
     skip: int = 0,
     limit: int = 100,
@@ -59,7 +59,7 @@ async def get_league_by_invite_code(
     league = await service.get_by_invite_code(invite_code)
     return {"success": True, "data": league}
 
-@router.post("/", response_model=StandardResponse[LeagueOut], status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=StandardResponse[LeagueOut], status_code=status.HTTP_201_CREATED)
 async def create_league(
     payload: LeagueCreate, 
     service: LeagueService = Depends(get_league_service),

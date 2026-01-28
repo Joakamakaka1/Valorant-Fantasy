@@ -1,9 +1,4 @@
-/**
- * @file api.ts
- * @description Axios-based API client with automatic token attachment and error handling.
- */
-
-import axios from "axios";
+import axios, { AxiosError } from "axios";
 import {
   LoginData,
   RegisterData,
@@ -18,202 +13,159 @@ import {
   DashboardOverview,
 } from "./types";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/v1";
+// In a HttpOnly Cookie architecture, the client cannot read the token.
+// Therefore, the browser must send the cookie automatically.
+// This requires the API to be on the same domain (via Next.js Middleware Proxy)
+// We FORCE the use of /api relative path to ensure cookies are sent to Next.js
+// Basic Setup
+const API_BASE_URL = "/api";
 
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
+/**
+ * ApiClient Wrapper
+ *
+ * Wraps Axios to provide type-safe methods that match our interceptor logic.
+ * The interceptor unwraps the response (returns data directly), so we need
+ * to reflect that in the return types (Promise<T> instead of Promise<AxiosResponse<T>>).
+ */
+class ApiClient {
+  private axiosInstance: import("axios").AxiosInstance;
 
-// Interceptor to add token to requests
-api.interceptors.request.use((config) => {
-  if (typeof window !== "undefined") {
-    const token = localStorage.getItem("token");
-    if (token) {
-      // Modern way to set headers in Axios 1.x
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+  constructor(baseURL: string) {
+    this.axiosInstance = axios.create({
+      baseURL,
+      withCredentials: true,
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    this.setupInterceptors();
   }
-  return config;
-});
 
-// Interceptor to handle standardized responses and errors
-api.interceptors.response.use(
-  (response) => {
-    // If it's a standard wrapped success response, unwrap it
-    if (
-      response.data &&
-      typeof response.data === "object" &&
-      response.data.success === true &&
-      "data" in response.data
-    ) {
-      // Modify data in-place so all service calls (return response.data) keep working
-      response.data = response.data.data;
-    }
-    return response;
-  },
-  (error) => {
-    const status = error.response?.status;
-    const url = error.config?.url;
-    // Extract error message from standard format if available
-    const errorData = error.response?.data;
-    const errorMessage =
-      errorData?.error?.message || errorData?.detail || error.message;
+  private setupInterceptors() {
+    this.axiosInstance.interceptors.response.use(
+      (response) => {
+        if (response.data?.success && "data" in response.data) {
+          return response.data.data;
+        }
+        return response.data;
+      },
+      (error: AxiosError<any>) => {
+        const errorData = error.response?.data;
+        const errorMessage =
+          errorData?.error?.message || errorData?.detail || error.message;
 
-    if (status === 401) {
-      console.warn(`[API 401] Unauthorized access to: ${url}`);
+        // Mutate error object to be more useful
+        error.message = errorMessage;
+        return Promise.reject(error);
+      },
+    );
+  }
 
-      const isAuthPath =
-        typeof window !== "undefined" &&
-        (window.location.pathname.includes("/login") ||
-          window.location.pathname.includes("/register"));
+  // Generic methods that match the interceptor's behavior
+  async get<T>(
+    url: string,
+    config?: import("axios").AxiosRequestConfig,
+  ): Promise<T> {
+    return this.axiosInstance.get(url, config) as Promise<T>;
+  }
 
-      if (typeof window !== "undefined" && !isAuthPath) {
-        console.error("Session expired or invalid token. Clearing storage.");
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-      }
-    }
+  async post<T>(
+    url: string,
+    data?: any,
+    config?: import("axios").AxiosRequestConfig,
+  ): Promise<T> {
+    return this.axiosInstance.post(url, data, config) as Promise<T>;
+  }
 
-    // Attach human readable message to the error object for easier handling in components
-    error.message = errorMessage;
-    return Promise.reject(error);
-  },
-);
+  async put<T>(
+    url: string,
+    data?: any,
+    config?: import("axios").AxiosRequestConfig,
+  ): Promise<T> {
+    return this.axiosInstance.put(url, data, config) as Promise<T>;
+  }
+
+  async patch<T>(
+    url: string,
+    data?: any,
+    config?: import("axios").AxiosRequestConfig,
+  ): Promise<T> {
+    return this.axiosInstance.patch(url, data, config) as Promise<T>;
+  }
+
+  async delete<T>(
+    url: string,
+    config?: import("axios").AxiosRequestConfig,
+  ): Promise<T> {
+    return this.axiosInstance.delete(url, config) as Promise<T>;
+  }
+}
+
+export const api = new ApiClient(API_BASE_URL);
 
 // ============================================================================
 // AUTH API
+// Data fetching methods for Client Components (Server Actions used for mutations)
+// ============================================================================
+
+// ============================================================================
+// AUTH API
+// Data fetching methods for Client Components (Server Actions used for mutations)
 // ============================================================================
 
 export const authApi = {
-  login: async (data: LoginData): Promise<TokenResponse> => {
-    // Backend expects 'username' and 'password' in Form Data for /login/token (FastAPI spec)
-    // or JSON if custom endpoint. Check backend implementation.
-    // backend uer.py: class UserLogin(BaseModel): email: EmailStr, password: str
-    const response = await api.post<TokenResponse>("/auth/login", data);
-    return response.data;
-  },
+  // Login/Register are better handled via Server Actions for Cookie setting
+  // But we keep them here if needed for client-side only flows (not recommended with HttpOnly)
 
-  register: async (data: RegisterData): Promise<User> => {
-    const response = await api.post<User>("/auth/register", data);
-    return response.data;
-  },
-
-  getMe: async (): Promise<User> => {
-    const response = await api.get<User>("/auth/me");
-    return response.data;
-  },
+  getMe: () => api.get<User>("/auth/me"),
 };
 
 export const leaguesApi = {
-  getAll: async (): Promise<League[]> => {
-    const response = await api.get<League[]>("/leagues/");
-    return response.data;
-  },
-  getMyLeagues: async (): Promise<LeagueMember[]> => {
-    const response = await api.get<LeagueMember[]>("/leagues/my");
-    return response.data;
-  },
-
-  getById: async (id: number): Promise<League> => {
-    const response = await api.get<League>(`/leagues/${id}`);
-    return response.data;
-  },
-  getByInviteCode: async (code: string): Promise<League> => {
-    const response = await api.get<League>(`/leagues/invite/${code}`);
-    return response.data;
-  },
-  getRankings: async (leagueId: number): Promise<LeagueMember[]> => {
-    const response = await api.get<LeagueMember[]>(
-      `/leagues/${leagueId}/rankings`,
-    );
-    return response.data;
-  },
-  getMembers: async (leagueId: number): Promise<LeagueMember[]> => {
-    const response = await api.get<LeagueMember[]>(
-      `/leagues/${leagueId}/members`,
-    );
-    return response.data;
-  },
-  getMemberRoster: async (memberId: number): Promise<RosterEntry[]> => {
-    const response = await api.get<RosterEntry[]>(
-      `/leagues/members/${memberId}/roster`,
-    );
-    return response.data;
-  },
-  addPlayerToRoster: async (
-    memberId: number,
-    data: any,
-  ): Promise<RosterEntry> => {
-    const response = await api.post<RosterEntry>(
-      `/leagues/members/${memberId}/roster`,
-      data,
-    );
-    return response.data;
-  },
-  removePlayerFromRoster: async (rosterId: number): Promise<void> => {
-    await api.delete(`/leagues/roster/${rosterId}`);
-  },
-  updateMember: async (memberId: number, data: any): Promise<LeagueMember> => {
-    const response = await api.patch<LeagueMember>(
-      `/leagues/members/${memberId}`,
-      data,
-    );
-    return response.data;
-  },
-  create: async (name: string, maxTeams: number): Promise<League> => {
-    const response = await api.post<League>("/leagues/", {
+  getAll: () => api.get<League[]>("/leagues"),
+  getMyLeagues: () => api.get<LeagueMember[]>("/leagues/my"),
+  getById: (id: number) => api.get<League>(`/leagues/${id}`),
+  getByInviteCode: (code: string) => api.get<League>(`/leagues/invite/${code}`),
+  getRankings: (leagueId: number) =>
+    api.get<LeagueMember[]>(`/leagues/${leagueId}/rankings`),
+  getMembers: (leagueId: number) =>
+    api.get<LeagueMember[]>(`/leagues/${leagueId}/members`),
+  getMemberRoster: (memberId: number) =>
+    api.get<RosterEntry[]>(`/leagues/members/${memberId}/roster`),
+  addPlayerToRoster: (memberId: number, data: any) =>
+    api.post<RosterEntry>(`/leagues/members/${memberId}/roster`, data),
+  removePlayerFromRoster: (rosterId: number) =>
+    api.delete<void>(`/leagues/roster/${rosterId}`),
+  updateMember: (memberId: number, data: any) =>
+    api.patch<LeagueMember>(`/leagues/members/${memberId}`, data),
+  create: (name: string, maxTeams: number) =>
+    api.post<League>("/leagues/", {
       name,
       max_teams: maxTeams,
-    });
-    return response.data;
-  },
-  join: async (leagueId: number, teamName: string): Promise<LeagueMember> => {
-    const response = await api.post<LeagueMember>(
-      `/leagues/${leagueId}/join`,
-      null,
-      {
-        params: { team_name: teamName },
-      },
-    );
-    return response.data;
-  },
+    }),
+  join: (leagueId: number, teamName: string) =>
+    api.post<LeagueMember>(`/leagues/${leagueId}/join`, null, {
+      params: { team_name: teamName },
+    }),
 };
 
 export const professionalApi = {
-  getPlayers: async (params?: any): Promise<Player[]> => {
-    const response = await api.get<Player[]>("/professional/players", {
-      params,
-    });
-    return response.data;
-  },
-  getTeams: async (params?: any): Promise<Team[]> => {
-    const response = await api.get<Team[]>("/professional/teams", { params });
-    return response.data;
-  },
+  getPlayers: (params?: any) =>
+    api.get<Player[]>("/professional/players", { params }),
+  getTeams: (params?: any) =>
+    api.get<Team[]>("/professional/teams", { params }),
 };
 
 export const matchesApi = {
-  getAll: async (params?: any): Promise<Match[]> => {
-    const response = await api.get<Match[]>("/matches/", { params });
-    return response.data;
-  },
-  getPlayerStats: async (playerId: number, recent?: number): Promise<any[]> => {
-    const response = await api.get(`/matches/players/${playerId}/stats`, {
+  getAll: (params?: any) => api.get<Match[]>("/matches", { params }),
+  getPlayerStats: (playerId: number, recent?: number) =>
+    api.get<any[]>(`/matches/players/${playerId}/stats`, {
       params: { recent },
-    });
-    return response.data;
-  },
+    }),
 };
 
 export const dashboardApi = {
-  getOverview: async (): Promise<DashboardOverview> => {
-    const response = await api.get<DashboardOverview>("/dashboard/overview");
-    return response.data;
-  },
+  getOverview: () => api.get<DashboardOverview>("/dashboard/overview"),
 };
 
 export default api;

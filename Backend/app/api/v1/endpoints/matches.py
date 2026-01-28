@@ -16,7 +16,7 @@ router = APIRouter(prefix="/matches", tags=["Matches"])
 # MATCHES ENDPOINTS
 # ============================================================================
 
-@router.get("/", response_model=StandardResponse[List[MatchOut]], status_code=status.HTTP_200_OK)
+@router.get("", response_model=StandardResponse[List[MatchOut]], status_code=status.HTTP_200_OK)
 async def get_all_matches(
     skip: int = Query(0, description="Número de registros a saltar"),
     limit: int = Query(100, description="Número máximo de registros a devolver"),

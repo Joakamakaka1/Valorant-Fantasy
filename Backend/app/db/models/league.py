@@ -40,7 +40,7 @@ class LeagueMember(Base):
 
     # Relationships
     members_league = relationship("League", back_populates="members") 
-    user = relationship("User", back_populates="leagues")
+    user = relationship("User", back_populates="leagues", lazy="joined")
     roster = relationship("Roster", back_populates="league_member")
     selected_team = relationship("Team", foreign_keys=[selected_team_id])  # Relación con Team
 

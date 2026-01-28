@@ -40,14 +40,14 @@ class LeagueMemberRepository(BaseRepository[LeagueMember]):
         if options:
             query = query.options(*options)
         result = await self.db.execute(query)
-        return list(result.scalars().all())
+        return list(result.scalars().unique().all())
 
     async def get_by_user(self, user_id: int, options: Optional[List] = None) -> List[LeagueMember]:
         query = select(LeagueMember).where(LeagueMember.user_id == user_id)
         if options:
             query = query.options(*options)
         result = await self.db.execute(query)
-        return list(result.scalars().all())
+        return list(result.scalars().unique().all())
 
     async def get_by_user_with_league(self, user_id: int) -> List[LeagueMember]:
         query = (

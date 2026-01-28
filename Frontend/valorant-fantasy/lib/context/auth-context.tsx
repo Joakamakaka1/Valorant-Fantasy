@@ -1,79 +1,107 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useState } from "react";
 import { User, LoginData, RegisterData } from "@/lib/types";
-import { authApi } from "@/lib/api";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  loginAction,
+  registerAction,
+  logoutAction,
+} from "@/lib/actions/auth-actions";
 
 interface AuthContextType {
   user: User | null;
-  loading: boolean;
+  isLoading: boolean;
   login: (data: LoginData) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
+  isAuthenticated: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+interface AuthProviderProps {
+  children: React.ReactNode;
+  initialUser: User | null;
+}
+
+/**
+ * AuthProvider manages authentication state.
+ *
+ * IMPORTANT: Receives initialUser from server-side session (app/layout.tsx).
+ * This eliminates the need for an initial client-side fetch, improving performance
+ * and avoiding waterfall requests.
+ */
+export function AuthProvider({ children, initialUser }: AuthProviderProps) {
+  const queryClient = useQueryClient();
   const router = useRouter();
 
-  useEffect(() => {
-    async function loadUser() {
-      const token = localStorage.getItem("token");
-      if (token) {
-        console.log("AuthProvider: Found token, fetching user...");
-        try {
-          const userData = await authApi.getMe();
-          setUser(userData);
-          localStorage.setItem("user", JSON.stringify(userData));
-          console.log("AuthProvider: User loaded successfully.");
-        } catch (error: any) {
-          console.error(
-            "AuthProvider: Failed to load user via getMe.",
-            error.response?.status,
-            error.message,
-          );
-          // If it's a 401, the interceptor will have already cleared the token,
-          // but we logout here to ensure the state is clean.
-          if (error.response?.status === 401) {
-            console.warn("AuthProvider: 401 detected, resetting user state.");
-            setUser(null);
-          }
-        }
-      } else {
-        console.log("AuthProvider: No token found.");
-      }
-      setLoading(false);
-    }
-    loadUser();
-  }, []);
+  // Initialize state with server-provided user
+  const [user, setUser] = useState<User | null>(initialUser);
+  const [isLoading, setIsLoading] = useState(false);
 
+  // Login Handler - Sets cookie via Server Action
   const login = async (data: LoginData) => {
-    const response = await authApi.login(data);
-    localStorage.setItem("token", response.access_token);
-    localStorage.setItem("user", JSON.stringify(response.user));
-    setUser(response.user);
-    router.push("/dashboard");
+    setIsLoading(true);
+    try {
+      const result = await loginAction(data);
+
+      if (result.success && result.user) {
+        // Update client state immediately
+        setUser(result.user);
+        queryClient.setQueryData(["user"], result.user);
+        router.push("/dashboard");
+        router.refresh(); // Refresh server components
+      } else {
+        throw new Error(result.error || "Login failed");
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
+  // Register Handler
   const register = async (data: RegisterData) => {
-    await authApi.register(data);
-    // After register, we could auto-login or redirect to login
-    router.push("/login");
+    setIsLoading(true);
+    try {
+      const result = await registerAction(data);
+      if (result.success) {
+        router.push("/login");
+      } else {
+        throw new Error(result.error || "Registration failed");
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const logout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    setUser(null);
-    router.push("/login");
+  // Logout Handler - Clears cookie via Server Action
+  const logout = async () => {
+    setIsLoading(true);
+    try {
+      await logoutAction();
+      setUser(null);
+      queryClient.setQueryData(["user"], null);
+      queryClient.clear();
+      router.push("/login");
+      router.refresh(); // Refresh server components
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isLoading,
+        login,
+        register,
+        logout,
+        isAuthenticated: !!user,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
