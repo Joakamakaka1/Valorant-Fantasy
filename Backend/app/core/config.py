@@ -73,7 +73,21 @@ class Settings:
         return [origin.strip() for origin in origins.split(",")]
     
     # External APIs (VLRGGAPI)
-    VLR_API_BASE_URL: str = os.getenv("VLR_API_BASE_URL", "https://vlrggapi.vercel.app")
+    VLR_API_BASE_URL: str = os.getenv("VLR_API_BASE_URL", "https://vlr.gg")
+    
+    # Redis Settings
+    REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
+    REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
+    REDIS_DB: int = int(os.getenv("REDIS_DB", "0"))
+    REDIS_PASSWORD: str = os.getenv("REDIS_PASSWORD", None)
+    
+    @property
+    def redis_url(self) -> str:
+        """Construye URL de conexión a Redis con o sin autenticación."""
+        if self.REDIS_PASSWORD:
+            return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+
     VALORANT_API_BASE_URL: str = os.getenv("VALORANT_API_BASE_URL", "https://valorant-api.com/v1")
     
     # @property

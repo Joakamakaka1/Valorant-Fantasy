@@ -16,14 +16,20 @@ logger = logging.getLogger("vlr_worker")
 
 async def run_sync():
     """Execution of the sync task (Async)"""
+    from app.core.redis import RedisCache
+    from app.core.config import settings
+    
+    redis = RedisCache(settings.redis_url)
     async with AsyncSessionLocal() as db:
         try:
             logger.info(f"--- STARTING WORKER SYNC AT {datetime.utcnow()} ---")
-            sync_service = SyncService(db)
+            sync_service = SyncService(db, redis=redis)
             count = await sync_service.sync_kickoff_2026()
             logger.info(f"--- WORKER SYNC COMPLETE. Matches processed/updated: {count} ---")
         except Exception as e:
             logger.error(f"Error during worker sync: {e}")
+        finally:
+            await redis.close()
 
 async def main_loop(interval_hours: int = 12):
     """Main loop for the worker"""

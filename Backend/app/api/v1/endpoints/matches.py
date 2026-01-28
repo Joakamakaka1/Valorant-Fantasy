@@ -1,5 +1,6 @@
-from typing import List, Optional
+from typing import List, Optional, Any
 from fastapi import APIRouter, Depends, status, Query
+from fastapi.responses import JSONResponse
 from app.auth.deps import get_current_user
 from app.api.deps import get_match_service, get_player_match_stats_service
 from app.service.match import MatchService, PlayerMatchStatsService
@@ -66,6 +67,14 @@ async def get_match_stats(
 ):
     """Obtener estadísticas de todos los jugadores en un partido."""
     stats = await service.get_by_match(match_id)
+    
+    # Si viene de Redis (lista de dicts), saltamos validación Pydantic
+    if isinstance(stats, list) and len(stats) > 0 and isinstance(stats[0], dict):
+        return JSONResponse(
+            content={"success": True, "data": stats},
+            status_code=status.HTTP_200_OK
+        )
+        
     return {"success": True, "data": stats}
 
 @router.get("/players/{player_id}/stats", response_model=StandardResponse[List[PlayerMatchStatsOut]], status_code=status.HTTP_200_OK)

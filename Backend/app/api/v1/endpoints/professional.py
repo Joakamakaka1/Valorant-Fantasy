@@ -1,5 +1,6 @@
-from typing import List, Optional
+from typing import List, Optional, Any
 from fastapi import APIRouter, Depends, status, Query
+from fastapi.responses import JSONResponse
 from app.auth.deps import get_current_user
 from app.api.deps import get_team_service, get_player_service
 from app.service.professional import TeamService, PlayerService
@@ -83,6 +84,13 @@ async def get_all_players(
         top=top,
         sort_by=sort_by
     )
+    # Si el servicio devuelve un dict, significa que vino de Redis ya formateado
+    # Retornamos JSONResponse directamente para saltar la validación de Pydantic
+    if isinstance(players, list) and len(players) > 0 and isinstance(players[0], dict):
+        return JSONResponse(
+            content={"success": True, "data": players},
+            status_code=status.HTTP_200_OK
+        )
     
     return {"success": True, "data": players}
 

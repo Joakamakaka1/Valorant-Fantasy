@@ -1,20 +1,26 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import List, Optional
+from typing import List, Optional, Any
 from sqlalchemy.orm import joinedload
+import logging
 from app.db.models.match import Match, PlayerMatchStats
 from app.core.exceptions import AppError
 from app.core.constants import ErrorCode
 from app.core.decorators import transactional
 from app.repository.match import MatchRepository, PlayerMatchStatsRepository
+from app.core.redis import RedisCache
+from app.schemas.match import PlayerMatchStatsOut
+
+logger = logging.getLogger(__name__)
 
 class MatchService:
     '''
     Servicio que maneja la lógica de negocio de partidos (Asíncrono).
     '''
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, redis: Optional[RedisCache] = None):
         self.db = db
         self.repo = MatchRepository(db)
+        self.redis = redis
 
     def _get_match_options(self):
         return [
@@ -110,13 +116,48 @@ class MatchService:
 class PlayerMatchStatsService:
     '''
     Servicio que maneja la lógica de negocio de estadísticas de jugadores (Asíncrono).
+    
+    Implementa caché con TTL para estadísticas de partidos (datos inmutables).
     '''
-    def __init__(self, db: AsyncSession):
+    CACHE_KEY_PREFIX = "stats:match:"
+    CACHE_TTL_SECONDS = 86400  # 24 horas
+    
+    def __init__(self, db: AsyncSession, redis: Optional[RedisCache] = None):
         self.db = db
         self.repo = PlayerMatchStatsRepository(db)
+        self.redis = redis
 
-    async def get_by_match(self, match_id: int) -> List[PlayerMatchStats]:
-        return await self.repo.get_by_match(match_id, options=[joinedload(PlayerMatchStats.player)])
+    async def get_by_match(self, match_id: int) -> List[Any]:
+        """
+        Obtiene estadísticas de un partido con caché (TTL 24h).
+        
+        Partidos completados son inmutables, por lo que la caché es efectiva.
+        """
+        cache_key = f"{self.CACHE_KEY_PREFIX}{match_id}"
+        
+        # Intentar obtener de caché
+        if self.redis:
+            cached_response = await self.redis.get(cache_key)
+            if cached_response and "success" in cached_response:
+                stats_data = cached_response.get("data", [])
+                logger.info(f"🟢 CACHE_HIT: Stats for match {match_id} found in Redis ({len(stats_data)} players)")
+                return stats_data
+        
+        # Caché miss o Redis no disponible: consultar DB
+        logger.info(f"🔴 CACHE_MISS: Fetching stats for match {match_id} from database")
+        stats = await self.repo.get_by_match(match_id, options=[joinedload(PlayerMatchStats.player)])
+        
+        # Guardar en caché con TTL de 24 horas
+        if self.redis and stats:
+            # Usar schema para serialización correcta (maneja relaciones como player)
+            stats_dict = [PlayerMatchStatsOut.model_validate(stat).model_dump() for stat in stats]
+            await self.redis.set(
+                cache_key,
+                {"success": True, "data": stats_dict},
+                ttl=self.CACHE_TTL_SECONDS
+            )
+        
+        return stats
 
     async def get_by_player(self, player_id: int) -> List[PlayerMatchStats]:
         return await self.repo.get_by_player(player_id, options=[joinedload(PlayerMatchStats.player)])
@@ -195,7 +236,15 @@ class PlayerMatchStatsService:
         stats.fantasy_points_earned = await self.calculate_fantasy_points(stats, match)
         
         # Use options to ensure player is loaded if we return it in response (typically stats out includes player)
-        return await self.repo.create(stats, options=[joinedload(PlayerMatchStats.player)])
+        created_stats = await self.repo.create(stats, options=[joinedload(PlayerMatchStats.player)])
+        
+        # Invalidar caché de este partido si existe (datos cambiaron)
+        if self.redis:
+            cache_key = f"{self.CACHE_KEY_PREFIX}{match_id}"
+            await self.redis.delete(cache_key)
+            logger.info(f"🗑️  Cache invalidated for match {match_id} after stats creation")
+        
+        return created_stats
 
     @transactional
     async def update(self, stats_id: int, stats_data: dict) -> PlayerMatchStats:

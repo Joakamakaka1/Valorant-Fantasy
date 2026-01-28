@@ -1,11 +1,16 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
+from typing import List, Optional, Any
 from sqlalchemy.orm import joinedload
+import logging
 from app.db.models.professional import Team, Player, PriceHistoryPlayer
 from app.core.exceptions import AppError
 from app.core.constants import ErrorCode
 from app.core.decorators import transactional
 from app.repository.professional import TeamRepository, PlayerRepository, PriceHistoryRepository
+from app.core.redis import RedisCache
+from app.schemas.professional import PlayerOut
+
+logger = logging.getLogger(__name__)
 
 class TeamService:
     '''
@@ -57,15 +62,52 @@ class TeamService:
 class PlayerService:
     '''
     Servicio que maneja la lógica de negocio de jugadores (Asíncrono).
+    
+    Implementa caché agresiva para jugadores (datos casi estáticos).
     '''
-    def __init__(self, db: AsyncSession):
+    CACHE_KEY_ALL_PLAYERS = "all_players_cache"
+    
+    def __init__(self, db: AsyncSession, redis: Optional[RedisCache] = None):
         self.db = db
         self.repo = PlayerRepository(db)
         self.price_history_repo = PriceHistoryRepository(db)
+        self.redis = redis
 
-    async def get_all(self, skip: int = 0, limit: int = 100, sort_by: str = None) -> List[Player]:
-        # Inject eager loading
-        return await self.repo.get_all(skip=skip, limit=limit, sort_by=sort_by, options=[joinedload(Player.team)])
+    async def get_all(self, skip: int = 0, limit: int = 100, sort_by: str = None) -> List[Any]:
+        """
+        Obtiene todos los jugadores con caché agresiva.
+        
+        Caché sin TTL en 'all_players_cache' (datos casi estáticos).
+        Retorna una lista de diccionarios si está en caché para saltar validación Pydantic.
+        """
+        # Intentar obtener de caché
+        if self.redis:
+            cached_response = await self.redis.get(self.CACHE_KEY_ALL_PLAYERS)
+            if cached_response and "success" in cached_response:
+                players_data = cached_response.get("data", [])
+                logger.info(f"🟢 CACHE_HIT: {len(players_data)} players found in '{self.CACHE_KEY_ALL_PLAYERS}'")
+                
+                # Aplicar skip y limit en memoria
+                if skip or limit < len(players_data):
+                    players_data = players_data[skip:skip + limit]
+                
+                return players_data
+        
+        # Caché miss o Redis no disponible: consultar DB
+        logger.info(f"🔴 CACHE_MISS: Fetching all players from database")
+        players = await self.repo.get_all(skip=0, limit=10000, sort_by=sort_by, options=[joinedload(Player.team)])
+        
+        # Guardar en caché (sin TTL, datos casi estáticos)
+        if self.redis and players:
+            # Usar schema para serialización correcta (maneja relaciones como team)
+            players_dict = [PlayerOut.model_validate(player).model_dump() for player in players]
+            await self.redis.set(
+                self.CACHE_KEY_ALL_PLAYERS,
+                {"success": True, "data": players_dict}
+            )
+        
+        # Aplicar paginación
+        return players[skip:skip + limit] if (skip or limit < len(players)) else players
 
     async def get_by_id(self, player_id: int) -> Optional[Player]:
         # Inject eager loading
@@ -100,13 +142,48 @@ class PlayerService:
         max_price: Optional[float] = None,
         top: Optional[int] = None,
         sort_by: Optional[str] = None
-    ) -> List[Player]:
+    ) -> List[Any]:
         """
         Método helper para obtener jugadores con filtros múltiples.
         
-        Centraliza la lógica de filtrado que antes estaba en el endpoint.
-        Prioridad: top > team_id > role > region > price_range > paginación con sort
+        **Optimización con caché**: Si la caché existe, aplica filtros en memoria y retorna dicts.
         """
+        # Intentar usar caché para filtrado en memoria
+        if self.redis:
+            cached_response = await self.redis.get(self.CACHE_KEY_ALL_PLAYERS)
+            if cached_response and "data" in cached_response:
+                players_data = cached_response["data"]
+                logger.info(f"🟢 CACHE_HIT: Applying in-memory filters on {len(players_data)} players")
+                
+                filtered = players_data
+                
+                if team_id is not None:
+                    filtered = [p for p in filtered if p.get("team_id") == team_id]
+                if role:
+                    filtered = [p for p in filtered if p.get("role") == role]
+                if region:
+                    filtered = [p for p in filtered if p.get("region") == region]
+                if min_price is not None and max_price is not None:
+                    filtered = [p for p in filtered if min_price <= float(p.get("current_price", 0)) <= max_price]
+                
+                # Ordenamiento
+                if sort_by == "points":
+                    filtered = sorted(filtered, key=lambda p: float(p.get("points", 0)), reverse=True)
+                elif sort_by == "price_asc":
+                    filtered = sorted(filtered, key=lambda p: float(p.get("current_price", 0)))
+                elif sort_by == "price_desc":
+                    filtered = sorted(filtered, key=lambda p: float(p.get("current_price", 0)), reverse=True)
+                
+                # Top N
+                if top:
+                    filtered = sorted(filtered, key=lambda p: float(p.get("points", 0)), reverse=True)[:top]
+                else:
+                    filtered = filtered[skip:skip + limit]
+                
+                return filtered
+        
+        # Fallback a logically normal if cache miss
+        logger.info("🔴 CACHE_MISS: Falling back to database for filtered players")
         if top:
             return await self.get_top_by_points(limit=top)
         if team_id:
@@ -138,6 +215,11 @@ class PlayerService:
             price_history = PriceHistoryPlayer(player_id=created_player.id, price=current_price)
             await self.price_history_repo.create(price_history)
         
+        # Invalidar caché después del commit exitoso
+        if self.redis:
+            await self.redis.delete(self.CACHE_KEY_ALL_PLAYERS)
+            logger.info("🗑️  Cache invalidated after player creation")
+        
         return created_player
 
     @transactional
@@ -154,12 +236,24 @@ class PlayerService:
                 price_history = PriceHistoryPlayer(player_id=player_id, price=player_data['current_price'])
                 await self.price_history_repo.create(price_history)
         
-        return await self.repo.update(player_id, player_data, options=[joinedload(Player.team)])
+        updated_player = await self.repo.update(player_id, player_data, options=[joinedload(Player.team)])
+        
+        # Invalidar caché después del commit exitoso
+        if self.redis:
+            await self.redis.delete(self.CACHE_KEY_ALL_PLAYERS)
+            logger.info("🗑️  Cache invalidated after player update")
+        
+        return updated_player
 
     @transactional
     async def delete(self, player_id: int) -> None:
         if not await self.repo.delete(player_id):
              raise AppError(404, ErrorCode.NOT_FOUND, "El jugador no existe")
+        
+        # Invalidar caché después del commit exitoso
+        if self.redis:
+            await self.redis.delete(self.CACHE_KEY_ALL_PLAYERS)
+            logger.info("🗑️  Cache invalidated after player deletion")
 
     async def get_price_history(self, player_id: int) -> List[PriceHistoryPlayer]:
         player = await self.repo.get(player_id)
