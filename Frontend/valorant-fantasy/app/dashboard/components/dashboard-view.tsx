@@ -36,44 +36,44 @@ export function DashboardView() {
       <SiteHeader />
       <div className="flex flex-1 flex-col p-4 md:p-8 overflow-y-auto gap-8">
         {/* HERO SECTION */}
-        <div className="relative w-full min-h-[450px] rounded-3xl overflow-hidden group shadow-xl border border-zinc-800 flex items-center transition-all hover:shadow-2xl hover:border-zinc-700">
+        <div className="relative w-full min-h-[350px] md:min-h-[450px] rounded-2xl md:rounded-3xl overflow-hidden group shadow-xl border border-zinc-800 flex items-center transition-all hover:shadow-2xl hover:border-zinc-700">
           {/* Background Gradient/Image */}
-          <div className="absolute inset-0 bg-[url('/fondo_overview.webp')] bg-cover bg-[center_top_25%] transition-transform duration-700 group-hover:scale-105 opacity-80" />
-          <div className="absolute inset-0 bg-gradient-to-r from-[#0f1923] via-[#0f1923]/90 to-transparent" />
-          <div className="relative h-full flex flex-col justify-center p-10 md:p-16 max-w-3xl gap-6">
-            <div className="flex items-center gap-3">
-              <span className="bg-[#ff4655] text-white px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-sm shadow-[0_0_10px_rgba(255,70,85,0.4)]">
+          <div className="absolute inset-0 bg-[url('/fondo_overview.webp')] bg-cover bg-center md:bg-[center_top_25%] transition-transform duration-700 group-hover:scale-105 opacity-80" />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#0f1923] via-[#0f1923]/95 md:via-[#0f1923]/90 to-transparent" />
+          <div className="relative h-full flex flex-col justify-center p-6 sm:p-8 md:p-16 max-w-3xl gap-4 md:gap-6">
+            <div className="flex items-center gap-2 md:gap-3 flex-wrap">
+              <span className="bg-[#ff4655] text-white px-2.5 md:px-3 py-1 text-[9px] md:text-[10px] font-black uppercase tracking-widest rounded-sm shadow-[0_0_10px_rgba(255,70,85,0.4)]">
                 New Season
               </span>
-              <span className="text-zinc-300 text-xs font-bold uppercase tracking-[0.2em]">
+              <span className="text-zinc-300 text-[10px] md:text-xs font-bold uppercase tracking-[0.15em] md:tracking-[0.2em]">
                 Episode 1: DEFIANCE
               </span>
             </div>
-            <h1 className="text-5xl md:text-7xl font-black text-white italic uppercase tracking-tighter leading-[0.9] drop-shadow-xl">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-7xl font-black text-white italic uppercase tracking-tighter leading-[0.9] drop-shadow-xl">
               Build Your <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#ff4655] to-white pr-2">
                 Dream Team
               </span>
             </h1>
-            <p className="text-zinc-300 text-lg font-medium max-w-lg leading-relaxed drop-shadow-md">
+            <p className="text-zinc-300 text-sm sm:text-base md:text-lg font-medium max-w-lg leading-relaxed drop-shadow-md">
               Compete against friends in the ultimate Valorant fantasy league.
               Scout players, manage your budget, and dominate the leaderboard.
             </p>
-            <div className="flex gap-4 pt-4">
-              <Link href="/dashboard/leagues/join">
+            <div className="flex flex-col sm:flex-row gap-3 md:gap-4 pt-2 md:pt-4">
+              <Link href="/dashboard/leagues/join" className="w-full sm:w-auto">
                 <Button
                   size="lg"
-                  className="bg-[#ff4655] hover:bg-[#ff4655]/90 text-white font-black italic uppercase tracking-wider px-8 py-6 text-lg rounded-xl shadow-[0_4px_20px_rgba(255,70,85,0.4)] transition-all hover:-translate-y-0.5"
+                  className="w-full sm:w-auto bg-[#ff4655] hover:bg-[#ff4655]/90 text-white font-black italic uppercase tracking-wider px-6 md:px-8 py-5 md:py-6 text-base md:text-lg rounded-xl shadow-[0_4px_20px_rgba(255,70,85,0.4)] transition-all hover:-translate-y-0.5"
                 >
                   <Play className="fill-current size-3.5" />
                   Play Now
                 </Button>
               </Link>
-              <Link href="/dashboard/leagues/join">
+              <Link href="/dashboard/leagues/join" className="w-full sm:w-auto">
                 <Button
                   variant="outline"
                   size="lg"
-                  className="border-white/20 text-white hover:bg-white/10 font-bold uppercase tracking-wider px-8 py-6 text-sm rounded-xl backdrop-blur-sm transition-all hover:-translate-y-0.5"
+                  className="w-full sm:w-auto border-white/20 text-white hover:bg-white/10 font-bold uppercase tracking-wider px-6 md:px-8 py-5 md:py-6 text-xs md:text-sm rounded-xl backdrop-blur-sm transition-all hover:-translate-y-0.5"
                 >
                   How to Play
                 </Button>

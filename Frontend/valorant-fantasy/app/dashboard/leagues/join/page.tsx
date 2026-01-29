@@ -95,10 +95,10 @@ export default function JoinLeaguePage() {
       <SiteHeader />
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 overflow-y-auto">
         <div className="flex flex-col gap-2">
-          <h1 className="text-5xl font-black text-white uppercase tracking-tighter italic">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-white uppercase tracking-tighter italic">
             League <span className="text-[#ff4655]">Hub</span>
           </h1>
-          <p className="text-zinc-400">
+          <p className="text-sm sm:text-base text-zinc-400">
             Create your own competition or join a friend's league to start your
             journey.
           </p>

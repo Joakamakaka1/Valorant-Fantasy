@@ -22,14 +22,14 @@ export function MatchCard({ match }: MatchCardProps) {
   return (
     <Card className="border-zinc-800/50 bg-zinc-900/40">
       <CardHeader className="pb-2">
-        <div className="relative flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-zinc-500">
-            <Calendar className="size-5" />
+        <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-xs sm:text-sm text-zinc-500">
+            <Calendar className="size-4 sm:size-5" />
             {match.date ? new Date(match.date).toLocaleDateString() : "TBD"}
           </div>
 
-          {/* Centered Status Badge */}
-          <div className="absolute left-1/2 -translate-x-1/2">
+          {/* Centered Status Badge - hide on very small screens to prevent overlap */}
+          <div className="hidden sm:block sm:absolute sm:left-1/2 sm:-translate-x-1/2">
             <div
               className={`text-[10px] font-bold uppercase px-3 py-1 rounded-full border ${
                 match.status === "live"
@@ -51,49 +51,59 @@ export function MatchCard({ match }: MatchCardProps) {
               className="text-zinc-600 hover:text-[#ff4655] transition-colors"
               title="View on VLR.gg"
             >
-              <ExternalLink className="size-5" />
+              <ExternalLink className="size-4 sm:size-5" />
             </a>
           )}
         </div>
       </CardHeader>
       <CardContent>
-        <div className="flex items-center justify-between gap-8 mb-6">
-          <div className="flex flex-1 items-center justify-end gap-3">
-            <span className="font-bold text-lg text-white text-right">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-8 mb-6">
+          <div className="flex-1 basis-0 min-w-0 flex w-full sm:w-auto items-center justify-center sm:justify-end gap-2 sm:gap-3 order-1">
+            <span className="font-bold text-sm sm:text-lg text-white text-center sm:text-right truncate max-w-full">
               {match.team_a?.name || "TBD"}
             </span>
             {match.team_a?.logo_url && (
               <img
                 src={match.team_a.logo_url}
                 alt=""
-                className="size-10 object-contain"
+                className="size-8 sm:size-10 object-contain shrink-0"
               />
             )}
           </div>
 
-          <div className="flex items-center gap-4 px-6 py-3 bg-black/40 rounded-xl min-w-[120px] justify-center border border-zinc-800/50">
+          <div className="flex items-center gap-3 sm:gap-4 px-4 sm:px-6 py-2 sm:py-3 bg-black/40 rounded-xl min-w-[100px] sm:min-w-[120px] justify-center border border-zinc-800/50 order-2 shrink-0">
             <span
-              className={`text-3xl font-black ${match.score_team_a > match.score_team_b ? "text-[#ff4655]" : "text-white"}`}
+              className={`text-2xl sm:text-3xl font-black ${
+                match.score_team_a > match.score_team_b
+                  ? "text-[#ff4655]"
+                  : "text-white"
+              }`}
             >
               {match.score_team_a}
             </span>
-            <span className="text-zinc-600 font-bold text-xl">:</span>
+            <span className="text-zinc-600 font-bold text-lg sm:text-xl">
+              :
+            </span>
             <span
-              className={`text-3xl font-black ${match.score_team_b > match.score_team_a ? "text-[#ff4655]" : "text-white"}`}
+              className={`text-2xl sm:text-3xl font-black ${
+                match.score_team_b > match.score_team_a
+                  ? "text-[#ff4655]"
+                  : "text-white"
+              }`}
             >
               {match.score_team_b}
             </span>
           </div>
 
-          <div className="flex flex-1 items-center gap-3">
+          <div className="flex-1 basis-0 min-w-0 flex w-full sm:w-auto items-center justify-center sm:justify-start gap-2 sm:gap-3 order-3">
             {match.team_b?.logo_url && (
               <img
                 src={match.team_b.logo_url}
                 alt=""
-                className="size-10 object-contain"
+                className="size-8 sm:size-10 object-contain shrink-0"
               />
             )}
-            <span className="font-bold text-lg text-white text-left">
+            <span className="font-bold text-sm sm:text-lg text-white text-center sm:text-left truncate max-w-full">
               {match.team_b?.name || "TBD"}
             </span>
           </div>
@@ -169,21 +179,21 @@ export function MatchCard({ match }: MatchCardProps) {
                             key={playerStat.player?.id}
                             className="flex items-center justify-between p-2 rounded-xl bg-zinc-950/20 border border-zinc-800/50 transition-all hover:border-[#ff4655]/50 hover:shadow-lg group"
                           >
-                            <div className="flex items-center gap-3 flex-1 min-w-0">
-                              <span className="text-[10px] font-bold text-zinc-500 w-20 uppercase shrink-0">
+                            <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                              <span className="text-[9px] sm:text-[11px] font-bold text-zinc-500 w-14 sm:w-20 uppercase shrink-0 leading-tight">
                                 {playerStat.agents.size === 1
                                   ? Array.from(playerStat.agents)[0]
                                   : `${playerStat.agents.size} agents`}
                               </span>
-                              <span className="text-sm font-semibold text-white truncate">
+                              <span className="text-xs sm:text-sm font-semibold text-white truncate">
                                 {playerStat.player?.name || "Unknown"}
                               </span>
                             </div>
                             <div className="flex flex-col items-end gap-0.5 shrink-0">
-                              <span className="text-sm font-black text-emerald-500">
+                              <span className="text-xs sm:text-sm font-black text-emerald-500 whitespace-nowrap">
                                 {playerStat.fantasy_points.toFixed(1)} pts
                               </span>
-                              <span className="text-[9px] text-zinc-600">
+                              <span className="text-[8px] sm:text-[9px] text-zinc-600">
                                 {playerStat.kills}/{playerStat.deaths}/
                                 {playerStat.assists}
                               </span>
@@ -248,21 +258,21 @@ export function MatchCard({ match }: MatchCardProps) {
                             key={playerStat.player?.id}
                             className="flex items-center justify-between p-2 rounded-xl bg-zinc-950/20 border border-zinc-800/50 transition-all hover:border-[#ff4655]/50 hover:shadow-lg group"
                           >
-                            <div className="flex items-center gap-3 flex-1 min-w-0">
-                              <span className="text-[10px] font-bold text-zinc-500 w-20 uppercase shrink-0">
+                            <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                              <span className="text-[9px] sm:text-[11px] font-bold text-zinc-500 w-14 sm:w-20 uppercase shrink-0 leading-tight">
                                 {playerStat.agents.size === 1
                                   ? Array.from(playerStat.agents)[0]
                                   : `${playerStat.agents.size} agents`}
                               </span>
-                              <span className="text-sm font-semibold text-white truncate">
+                              <span className="text-xs sm:text-sm font-semibold text-white truncate">
                                 {playerStat.player?.name || "Unknown"}
                               </span>
                             </div>
                             <div className="flex flex-col items-end gap-0.5 shrink-0">
-                              <span className="text-sm font-black text-emerald-500">
+                              <span className="text-xs sm:text-sm font-black text-emerald-500 whitespace-nowrap">
                                 {playerStat.fantasy_points.toFixed(1)} pts
                               </span>
-                              <span className="text-[9px] text-zinc-600">
+                              <span className="text-[8px] sm:text-[9px] text-zinc-600">
                                 {playerStat.kills}/{playerStat.deaths}/
                                 {playerStat.assists}
                               </span>

@@ -52,10 +52,10 @@ export function PlayersView() {
       <SiteHeader />
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 overflow-y-auto bg-[#0f1923]">
         <div className="w-full flex flex-col gap-2">
-          <h1 className="text-5xl font-black text-white uppercase tracking-tighter italic">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-white uppercase tracking-tighter italic">
             Operator <span className="text-[#ff4655]">Database</span>
           </h1>
-          <p className="text-zinc-500 font-bold uppercase text-xs tracking-widest">
+          <p className="text-sm sm:text-base text-zinc-400">
             Protocol statistics and market valuation for active VCT personnel.
           </p>
         </div>

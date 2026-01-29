@@ -286,8 +286,8 @@ export function RosterView({ member, roster, allPlayers }: RosterViewProps) {
                       </button>
                     </div>
                   </DialogTrigger>
-                  <DialogContent className="bg-zinc-950 border-zinc-800 text-white w-[95vw] max-w-[600px] max-h-[90vh] p-0 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]">
-                    <div className="bg-[#ff4655] p-4 sm:p-6">
+                  <DialogContent className="bg-zinc-950 border-zinc-800 text-white w-[92vw] sm:w-[95vw] max-w-[600px] max-h-[90vh] p-0 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] rounded-2xl sm:rounded-lg">
+                    <div className="bg-[#ff4655] p-5 sm:p-6 pt-10 sm:pt-6">
                       <DialogHeader>
                         <DialogTitle className="uppercase italic font-black text-xl sm:text-2xl md:text-3xl text-white tracking-tighter">
                           Scout{" "}
@@ -300,13 +300,13 @@ export function RosterView({ member, roster, allPlayers }: RosterViewProps) {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" />
                         <Input
                           placeholder="Search VCT database..."
-                          className="pl-10 bg-zinc-900 border-zinc-800 text-white font-bold"
+                          className="pl-10 bg-zinc-900 border-zinc-800 text-white font-bold h-10 sm:h-11"
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
                         />
                       </div>
                       <div className="max-h-[50vh] overflow-y-auto pr-1 custom-scrollbar">
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                           {allPlayers
                             .filter((p) => p.role === slot.role)
                             .filter((p) =>
@@ -327,68 +327,95 @@ export function RosterView({ member, roster, allPlayers }: RosterViewProps) {
                             .map((player) => (
                               <div
                                 key={player.id}
-                                className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-3 hover:bg-zinc-900 hover:border-[#ff4655]/30 transition-all group"
+                                className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 hover:bg-zinc-900 hover:border-[#ff4655]/30 transition-all group"
                               >
-                                <div className="flex items-start justify-between gap-3">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                   <div className="flex-1 min-w-0">
-                                    <div className="font-black text-sm sm:text-base uppercase italic text-white truncate">
-                                      {player.name}
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <div className="font-black text-lg sm:text-xl uppercase italic text-white leading-tight">
+                                        {player.name}
+                                      </div>
                                     </div>
-                                    <div className="text-[10px] sm:text-xs text-zinc-500 font-bold uppercase truncate">
+                                    <div className="text-[10px] sm:text-xs text-zinc-500 font-bold uppercase tracking-wider mb-3">
                                       {player.team?.name} • {player.region}
                                     </div>
-                                    <div className="flex items-center gap-3 mt-2">
-                                      <div className="flex items-center gap-1">
+                                    <div className="flex items-center gap-2">
+                                      <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/20">
                                         <span className="text-sm font-black text-emerald-400">
                                           {player.points.toFixed(1)}
                                         </span>
-                                        <span className="text-[9px] text-emerald-400 uppercase font-black pt-1">
+                                        <span className="text-[8px] text-emerald-400 uppercase font-black">
                                           PTS
                                         </span>
                                       </div>
                                     </div>
                                   </div>
-                                  <Button
-                                    size="sm"
-                                    disabled={
-                                      isProcessing ||
-                                      member.budget < player.current_price
-                                    }
-                                    className="bg-zinc-700 hover:bg-emerald-500 h-9 px-3 text-xs sm:text-sm uppercase font-black italic transition-all group-hover:scale-105 disabled:bg-zinc-800 disabled:opacity-50 whitespace-nowrap"
-                                    onClick={() =>
-                                      handleBuyPlayer(slot, player)
-                                    }
-                                  >
-                                    €{player.current_price}M
-                                  </Button>
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between sm:justify-end gap-3 pt-3 sm:pt-0 border-t sm:border-t-0 border-zinc-800/50">
+                                    <div className="flex justify-between items-center sm:block w-full sm:w-auto">
+                                      <div className="flex flex-col sm:items-end">
+                                        <span className="text-[8px] text-zinc-500 uppercase font-black leading-none mb-1">
+                                          Current Price
+                                        </span>
+                                        <span className="text-sm sm:text-base text-emerald-400 font-black italic">
+                                          €{player.current_price}M
+                                        </span>
+                                      </div>
+                                      <Button
+                                        size="sm"
+                                        disabled={
+                                          isProcessing ||
+                                          member.budget < player.current_price
+                                        }
+                                        className="sm:hidden bg-zinc-800 hover:bg-emerald-500 text-white h-9 px-4 text-[10px] uppercase font-black italic transition-all disabled:bg-zinc-900 disabled:opacity-50 whitespace-nowrap border border-zinc-700"
+                                        onClick={() =>
+                                          handleBuyPlayer(slot, player)
+                                        }
+                                      >
+                                        BUY PLAYER
+                                      </Button>
+                                    </div>
+                                    <Button
+                                      size="sm"
+                                      disabled={
+                                        isProcessing ||
+                                        member.budget < player.current_price
+                                      }
+                                      className="hidden sm:flex bg-zinc-800 hover:bg-emerald-500 text-white h-10 px-6 text-sm uppercase font-black italic transition-all group-hover:scale-105 disabled:bg-zinc-900 disabled:opacity-50 whitespace-nowrap border border-zinc-700 hover:border-emerald-400"
+                                      onClick={() =>
+                                        handleBuyPlayer(slot, player)
+                                      }
+                                    >
+                                      SIGN FOR €{player.current_price}M
+                                    </Button>
+                                  </div>
                                 </div>
                               </div>
                             ))}
                         </div>
                       </div>
-                      <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
-                        <div className="flex gap-2">
+                      <div className="flex items-center justify-start pt-3 border-t border-zinc-800/50">
+                        <div className="flex gap-2 w-full overflow-x-auto no-scrollbar pb-1">
                           <button
                             onClick={() => toggleScoutSort("points")}
-                            className={`text-[10px] uppercase font-black px-3 py-1.5 rounded transition-colors ${
+                            className={`text-[9px] sm:text-[10px] uppercase font-black px-3 py-2 rounded-lg transition-all shrink-0 border ${
                               scoutSort.key === "points"
-                                ? "bg-[#ff4655] text-white"
-                                : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                                ? "bg-[#ff4655] text-white border-[#ff4655]"
+                                : "bg-zinc-900 text-zinc-500 border-zinc-800 hover:border-zinc-700 hover:text-white"
                             }`}
                           >
-                            Points{" "}
+                            Sort by Points{" "}
                             {scoutSort.key === "points" &&
                               (scoutSort.direction === "asc" ? "↑" : "↓")}
                           </button>
                           <button
                             onClick={() => toggleScoutSort("current_price")}
-                            className={`text-[10px] uppercase font-black px-3 py-1.5 rounded transition-colors ${
+                            className={`text-[9px] sm:text-[10px] uppercase font-black px-3 py-2 rounded-lg transition-all shrink-0 border ${
                               scoutSort.key === "current_price"
-                                ? "bg-[#ff4655] text-white"
-                                : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                                ? "bg-[#ff4655] text-white border-[#ff4655]"
+                                : "bg-zinc-900 text-zinc-500 border-zinc-800 hover:border-zinc-700 hover:text-white"
                             }`}
                           >
-                            Price{" "}
+                            Sort by Price{" "}
                             {scoutSort.key === "current_price" &&
                               (scoutSort.direction === "asc" ? "↑" : "↓")}
                           </button>

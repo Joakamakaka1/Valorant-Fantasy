@@ -100,22 +100,22 @@ export function MatchesView() {
       <SiteHeader />
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 overflow-y-auto">
         <div className="flex flex-col gap-2">
-          <h1 className="text-5xl font-black text-white uppercase tracking-tighter italic">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-white uppercase tracking-tighter italic">
             Match <span className="text-[#ff4655]">Results</span>
           </h1>
-          <p className="text-zinc-400">
+          <p className="text-sm sm:text-base text-zinc-400">
             Recent and upcoming matches across all VCT tournaments.
           </p>
         </div>
 
         {/* Region Filters */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap no-scrollbar">
           {regions.map((region) => (
             <Button
               key={region}
               variant={currentRegion === region ? "outline" : "ghost"}
               size="sm"
-              className={`h-8 font-black uppercase tracking-tighter italic transition-all ${
+              className={`h-8 px-3 md:px-4 font-black uppercase tracking-tighter italic transition-all text-xs md:text-sm shrink-0 ${
                 currentRegion === region
                   ? "border-[#ff4655] bg-[#ff4655]/10 text-white"
                   : "text-zinc-500 hover:text-white"
@@ -133,32 +133,34 @@ export function MatchesView() {
           onValueChange={setStatusFilter}
           className="w-full"
         >
-          <TabsList className="bg-zinc-900/40 border border-zinc-800 w-full justify-start p-1 h-12 rounded-xl">
-            <TabsTrigger
-              value="live"
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-600 data-[state=active]:to-red-500 data-[state=active]:text-white px-8 font-black uppercase italic tracking-tighter rounded-lg transition-all animate-pulse data-[state=active]:animate-pulse"
-            >
-              🔴 Live
-            </TabsTrigger>
-            <TabsTrigger
-              value="all"
-              className="data-[state=active]:bg-zinc-800 data-[state=active]:text-white px-8 font-black uppercase italic tracking-tighter rounded-lg transition-all"
-            >
-              All Matches
-            </TabsTrigger>
-            <TabsTrigger
-              value="upcoming"
-              className="data-[state=active]:bg-zinc-800 data-[state=active]:text-white px-8 font-black uppercase italic tracking-tighter rounded-lg transition-all"
-            >
-              Upcoming
-            </TabsTrigger>
-            <TabsTrigger
-              value="completed"
-              className="data-[state=active]:bg-zinc-800 data-[state=active]:text-white px-8 font-black uppercase italic tracking-tighter rounded-lg transition-all"
-            >
-              Completed
-            </TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 no-scrollbar">
+            <TabsList className="bg-zinc-900/40 border border-zinc-800 w-full min-w-max md:min-w-0 justify-start md:justify-between p-1 h-10 md:h-12 rounded-xl">
+              <TabsTrigger
+                value="live"
+                className="flex-1 data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-600 data-[state=active]:to-red-500 data-[state=active]:text-white px-4 md:px-8 font-black uppercase italic tracking-tighter rounded-lg transition-all animate-pulse data-[state=active]:animate-pulse text-xs md:text-sm whitespace-nowrap"
+              >
+                🔴 Live
+              </TabsTrigger>
+              <TabsTrigger
+                value="all"
+                className="flex-1 data-[state=active]:bg-zinc-800 data-[state=active]:text-white px-4 md:px-8 font-black uppercase italic tracking-tighter rounded-lg transition-all text-xs md:text-sm whitespace-nowrap"
+              >
+                All Matches
+              </TabsTrigger>
+              <TabsTrigger
+                value="upcoming"
+                className="flex-1 data-[state=active]:bg-zinc-800 data-[state=active]:text-white px-4 md:px-8 font-black uppercase italic tracking-tighter rounded-lg transition-all text-xs md:text-sm whitespace-nowrap"
+              >
+                Upcoming
+              </TabsTrigger>
+              <TabsTrigger
+                value="completed"
+                className="flex-1 data-[state=active]:bg-zinc-800 data-[state=active]:text-white px-4 md:px-8 font-black uppercase italic tracking-tighter rounded-lg transition-all text-xs md:text-sm whitespace-nowrap"
+              >
+                Completed
+              </TabsTrigger>
+            </TabsList>
+          </div>
         </Tabs>
 
         {isLoading ? (

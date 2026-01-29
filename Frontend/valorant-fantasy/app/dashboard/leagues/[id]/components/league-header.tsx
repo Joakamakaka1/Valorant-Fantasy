@@ -54,24 +54,24 @@ export function LeagueHeader({
   };
 
   return (
-    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-8">
-      <div className="flex flex-col gap-1">
+    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 pb-8">
+      <div className="flex flex-col gap-1 w-full lg:w-auto">
         <div className="flex items-center gap-3">
-          <div className="bg-[#ff4655] p-2 rounded-lg shadow-[0_0_20px_rgba(255,70,85,0.3)]">
-            <Trophy className="size-6 text-white" />
+          <div className="bg-[#ff4655] p-2 sm:p-2.5 rounded-lg shrink-0">
+            <Trophy className="size-10 sm:size-7 text-white" />
           </div>
-          <h1 className="text-5xl font-black text-white uppercase tracking-tighter italic">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-white uppercase tracking-tighter italic">
             {league.name}
           </h1>
         </div>
-        <div className="flex items-center gap-4 text-sm text-zinc-400 mt-2">
-          <span className="flex items-center gap-1 font-bold">
-            <Users className="size-4 text-[#ff4655]" /> {memberCount}/
-            {league.max_teams} Players
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-sm text-zinc-400 mt-2">
+          <span className="flex items-center gap-1.5 font-bold text-xs sm:text-sm shrink-0">
+            <Users className="size-3.5 sm:size-4 text-[#ff4655]" />{" "}
+            {memberCount}/{league.max_teams} Players
           </span>
           <button
             onClick={copyInvite}
-            className="flex items-center gap-2 uppercase font-black text-[10px] bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded border border-zinc-700 hover:bg-zinc-700 hover:text-white transition-colors cursor-pointer"
+            className="flex items-center gap-2 uppercase font-black text-[9px] sm:text-[10px] bg-zinc-800 text-zinc-300 px-2 py-0.5 sm:py-1 rounded border border-zinc-700 hover:bg-zinc-700 hover:text-white transition-colors cursor-pointer shrink-0"
           >
             INVITE CODE:{" "}
             <span className="text-white">{league.invite_code}</span>
@@ -84,10 +84,10 @@ export function LeagueHeader({
         </div>
       </div>
 
-      <div className="relative">
-        <div className="flex flex-col sm:flex-row items-center gap-4 bg-zinc-900/40 border border-zinc-800/50 p-4 rounded-xl backdrop-blur-xl shadow-2xl">
+      <div className="w-full lg:w-auto">
+        <div className="flex flex-col sm:flex-row items-center gap-4 bg-zinc-900/40 border border-zinc-800/50 p-4 rounded-xl backdrop-blur-xl shadow-2xl w-full">
           <div className="flex items-center gap-4 flex-1 w-full">
-            <div className="flex flex-col flex-1">
+            <div className="flex flex-col flex-1 min-w-0">
               <span className="text-[10px] uppercase text-zinc-500 font-black tracking-[0.2em] mb-1">
                 Representing Organization
               </span>
@@ -100,12 +100,12 @@ export function LeagueHeader({
                   val !== "placeholder" && handleSelectProTeam(parseInt(val))
                 }
               >
-                <SelectTrigger className="w-full sm:w-[280px] h-10 bg-transparent border-none p-0 text-white text-sm font-black uppercase italic tracking-tighter hover:text-[#ff4655] transition-colors focus:ring-0 shadow-none pl-1">
+                <SelectTrigger className="w-full sm:w-[240px] md:w-[280px] h-10 bg-transparent border-none p-0 text-white text-sm font-black uppercase italic tracking-tighter hover:text-[#ff4655] transition-colors focus:ring-0 shadow-none pl-1">
                   <SelectValue placeholder="CLAIM YOUR ORG" />
                 </SelectTrigger>
                 <SelectContent
                   position="popper"
-                  className="bg-zinc-950 border-zinc-800 text-white min-w-[280px] max-h-[300px]"
+                  className="bg-zinc-950 border-zinc-800 text-white w-[calc(100vw-32px)] sm:min-w-[240px] md:min-w-[280px] sm:w-auto max-h-[300px]"
                   sideOffset={8}
                 >
                   <SelectItem
@@ -142,12 +142,12 @@ export function LeagueHeader({
             </div>
           </div>
           <div className="hidden sm:block w-px h-12 bg-zinc-800 mx-2"></div>
-          <div className="flex flex-col items-center sm:items-end justify-center px-4">
-            <span className="text-[10px] uppercase text-zinc-500 font-bold tracking-widest leading-none mb-1 text-center sm:text-right">
+          <div className="flex flex-col items-center sm:items-end justify-center px-0 sm:px-4 w-full sm:w-auto mt-2 sm:mt-0 pt-3 sm:pt-0 border-t sm:border-t-0 border-zinc-800/50 shrink-0">
+            <span className="text-[10px] uppercase text-zinc-500 font-bold tracking-widest leading-none mb-1.5 text-center sm:text-right">
               Organization Status
             </span>
             <span
-              className={`text-xs font-black uppercase tracking-tighter italic ${myMemberInfo?.selected_team_id ? "text-emerald-400" : "text-amber-500"}`}
+              className={`text-[10px] sm:text-xs font-black uppercase tracking-tighter italic ${myMemberInfo?.selected_team_id ? "text-emerald-400" : "text-amber-500"}`}
             >
               {myMemberInfo?.selected_team_id
                 ? "VERIFIED CONTRACT"
