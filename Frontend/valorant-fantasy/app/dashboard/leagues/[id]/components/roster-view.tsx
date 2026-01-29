@@ -327,65 +327,58 @@ export function RosterView({ member, roster, allPlayers }: RosterViewProps) {
                             .map((player) => (
                               <div
                                 key={player.id}
-                                className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 hover:bg-zinc-900 hover:border-[#ff4655]/30 transition-all group"
+                                className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-3 sm:p-3.5 hover:border-[#ff4655]/30 transition-all"
                               >
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sm:gap-3">
                                   <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 mb-1">
-                                      <div className="font-black text-lg sm:text-xl uppercase italic text-white leading-tight">
+                                    <div className="flex items-center gap-2 mb-0.5 sm:mb-1">
+                                      <div className="w-full font-black text-lg sm:text-base uppercase italic text-white leading-tight sm:truncate">
                                         {player.name}
                                       </div>
                                     </div>
-                                    <div className="text-[10px] sm:text-xs text-zinc-500 font-bold uppercase tracking-wider mb-3">
+                                    <div className="text-[10px] sm:text-xs text-zinc-500 font-bold uppercase tracking-wider mb-3 sm:mb-2">
                                       {player.team?.name} • {player.region}
                                     </div>
                                     <div className="flex items-center gap-2">
-                                      <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/20">
-                                        <span className="text-sm font-black text-emerald-400">
+                                      <div className="flex items-center gap-1.5 px-2 py-0.5 rounded">
+                                        <span className="text-sm sm:text-xs font-black text-emerald-400">
                                           {player.points.toFixed(1)}
                                         </span>
-                                        <span className="text-[8px] text-emerald-400 uppercase font-black">
+                                        <span className="text-[8px] text-emerald-400 uppercase font-black mt-0.5">
                                           PTS
                                         </span>
                                       </div>
                                     </div>
                                   </div>
-                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between sm:justify-end gap-3 pt-3 sm:pt-0 border-t sm:border-t-0 border-zinc-800/50">
-                                    <div className="flex justify-between items-center sm:block w-full sm:w-auto">
-                                      <div className="flex flex-col sm:items-end">
-                                        <span className="text-[8px] text-zinc-500 uppercase font-black leading-none mb-1">
-                                          Current Price
-                                        </span>
-                                        <span className="text-sm sm:text-base text-emerald-400 font-black italic">
-                                          €{player.current_price}M
-                                        </span>
-                                      </div>
-                                      <Button
-                                        size="sm"
-                                        disabled={
-                                          isProcessing ||
-                                          member.budget < player.current_price
-                                        }
-                                        className="sm:hidden bg-zinc-800 hover:bg-emerald-500 text-white h-9 px-4 text-[10px] uppercase font-black italic transition-all disabled:bg-zinc-900 disabled:opacity-50 whitespace-nowrap border border-zinc-700"
-                                        onClick={() =>
-                                          handleBuyPlayer(slot, player)
-                                        }
-                                      >
-                                        BUY PLAYER
-                                      </Button>
+
+                                  <div className="flex items-center justify-between sm:justify-end gap-3 pt-3 sm:pt-0 border-t sm:border-t-0 border-zinc-800/50">
+                                    {/* Mobile Price Display */}
+                                    <div className="flex flex-col sm:hidden">
+                                      <span className="text-[8px] text-zinc-500 uppercase font-black leading-none mb-1">
+                                        Current Price
+                                      </span>
+                                      <span className="text-sm text-emerald-400 font-black italic">
+                                        €{player.current_price}M
+                                      </span>
                                     </div>
+
                                     <Button
                                       size="sm"
                                       disabled={
                                         isProcessing ||
                                         member.budget < player.current_price
                                       }
-                                      className="hidden sm:flex bg-zinc-800 hover:bg-emerald-500 text-white h-10 px-6 text-sm uppercase font-black italic transition-all group-hover:scale-105 disabled:bg-zinc-900 disabled:opacity-50 whitespace-nowrap border border-zinc-700 hover:border-emerald-400"
+                                      className="bg-zinc-800 sm:bg-zinc-700 hover:bg-emerald-700 text-white h-10 sm:h-9 px-6 sm:px-4 text-xs sm:text-sm uppercase font-black italic transition-all group-hover:scale-105 disabled:bg-zinc-900 disabled:opacity-50 whitespace-nowrap border border-zinc-700 sm:border-none"
                                       onClick={() =>
                                         handleBuyPlayer(slot, player)
                                       }
                                     >
-                                      SIGN FOR €{player.current_price}M
+                                      <span className="sm:hidden">
+                                        BUY PLAYER
+                                      </span>
+                                      <span className="hidden sm:inline">
+                                        €{player.current_price}M
+                                      </span>
                                     </Button>
                                   </div>
                                 </div>
