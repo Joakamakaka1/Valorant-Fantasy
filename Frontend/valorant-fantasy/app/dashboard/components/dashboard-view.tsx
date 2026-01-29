@@ -46,7 +46,7 @@ export function DashboardView() {
                 New Season
               </span>
               <span className="text-zinc-300 text-xs font-bold uppercase tracking-[0.2em]">
-                Episode 8: DEFIANCE
+                Episode 1: DEFIANCE
               </span>
             </div>
             <h1 className="text-5xl md:text-7xl font-black text-white italic uppercase tracking-tighter leading-[0.9] drop-shadow-xl">
@@ -61,14 +61,18 @@ export function DashboardView() {
             </p>
             <div className="flex gap-4 pt-4">
               <Link href="/dashboard/leagues/join">
-                <Button className="bg-[#ff4655] hover:bg-[#ff4655]/90 text-white font-black italic uppercase tracking-wider px-8 py-6 text-lg rounded-xl shadow-[0_4px_20px_rgba(255,70,85,0.4)] transition-all hover:-translate-y-0.5">
-                  <Play className="fill-current size-4" />
+                <Button
+                  size="lg"
+                  className="bg-[#ff4655] hover:bg-[#ff4655]/90 text-white font-black italic uppercase tracking-wider px-8 py-6 text-lg rounded-xl shadow-[0_4px_20px_rgba(255,70,85,0.4)] transition-all hover:-translate-y-0.5"
+                >
+                  <Play className="fill-current size-3.5" />
                   Play Now
                 </Button>
               </Link>
               <Link href="/dashboard/leagues/join">
                 <Button
                   variant="outline"
+                  size="lg"
                   className="border-white/20 text-white hover:bg-white/10 font-bold uppercase tracking-wider px-8 py-6 text-sm rounded-xl backdrop-blur-sm transition-all hover:-translate-y-0.5"
                 >
                   How to Play
@@ -151,11 +155,11 @@ export function DashboardView() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pb-8">
           <div className="lg:col-span-2 bg-zinc-900/40 border border-zinc-800/50 rounded-2xl p-8 flex flex-col gap-6  transition-colors">
             <div className="flex items-center gap-3 text-[#ff4655]">
-              <div className="p-2 bg-[#ff4655]/10 rounded-lg">
+              <div className="p-2 rounded-lg">
                 <TrendingUp className="size-6" />
               </div>
               <span className="text-lg font-black uppercase tracking-wide">
-                Top Players (Points)
+                Top Players
               </span>
             </div>
             <div className="space-y-4">
@@ -180,7 +184,7 @@ export function DashboardView() {
                           #{i + 1}
                         </div>
                       </div>
-                      <div className="flex flex-col gap-0.5">
+                      <div className="flex flex-col gap-1">
                         <span className="font-black text-white text-lg uppercase italic leading-none group-hover:text-[#ff4655] transition-colors">
                           {player.name}
                         </span>
@@ -190,17 +194,12 @@ export function DashboardView() {
                           <span className="text-xs text-zinc-400 uppercase font-bold tracking-wide">
                             {player.team?.name || "Free Agent"}
                           </span>
-
-                          {/* Badge del Rol (Sentinel, Duelist, etc.) */}
-                          <span className="text-[10px] bg-zinc-800/80 text-zinc-300 px-2 py-0.5 rounded border border-zinc-700 font-bold uppercase tracking-wider">
-                            {player.role || "Flex"}
-                          </span>
                         </div>
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <span className="text-emerald-400 text-xl font-black italic tracking-tight">
-                        {player.points}{" "}
+                        {player.points}
                         <span className="text-sm text-emerald-500/70 not-italic">
                           pts
                         </span>
