@@ -318,12 +318,11 @@ class SyncService:
         return await self.sync_vct_kickoff_comprehensive()
 
     async def update_player_global_stats(self, match: Match):
-        """Actualiza los puntos totales y precios (Asíncrono)"""
-        # NO usamos @transactional aquí porque se asume que se llama desde _sync_match_details que YA es transaccional
+        """Actualiza los puntos totales y precios (Asíncrono) recalculando desde la base de datos."""
         for stats in match.player_stats:
             player = stats.player
-            new_points = player.points + stats.fantasy_points_earned
             
+            # Recalcular TODOS los puntos y partidos desde la base de datos para evitar duplicaciones
             q_all_stats = (
                 select(PlayerMatchStats)
                 .options(selectinload(PlayerMatchStats.match))
@@ -333,12 +332,15 @@ class SyncService:
             res_all_stats = await self.db.execute(q_all_stats)
             all_stats = res_all_stats.scalars().all()
             
+            # Cálculo exacto basado en el historial real
+            total_points = sum(s.fantasy_points_earned for s in all_stats)
+            total_matches = len(all_stats)
             new_price = self.calculate_new_price(all_stats)
             
             await self.player_service.update(player.id, {
-                "points": round(new_points, 2),
+                "points": round(total_points, 2),
                 "current_price": new_price,
-                "matches_played": player.matches_played + 1
+                "matches_played": total_matches
             })
 
         await self.recalculate_league_members_points_for_match(match)

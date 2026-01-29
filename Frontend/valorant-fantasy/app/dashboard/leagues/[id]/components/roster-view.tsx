@@ -286,16 +286,16 @@ export function RosterView({ member, roster, allPlayers }: RosterViewProps) {
                       </button>
                     </div>
                   </DialogTrigger>
-                  <DialogContent className="bg-zinc-950 border-zinc-800 text-white sm:max-w-[480px] p-0 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]">
-                    <div className="bg-[#ff4655] p-6">
+                  <DialogContent className="bg-zinc-950 border-zinc-800 text-white w-[95vw] max-w-[600px] max-h-[90vh] p-0 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+                    <div className="bg-[#ff4655] p-4 sm:p-6">
                       <DialogHeader>
-                        <DialogTitle className="uppercase italic font-black text-3xl text-white tracking-tighter">
+                        <DialogTitle className="uppercase italic font-black text-xl sm:text-2xl md:text-3xl text-white tracking-tighter">
                           Scout{" "}
                           <span className="text-zinc-900">{slot.role}</span>
                         </DialogTitle>
                       </DialogHeader>
                     </div>
-                    <div className="flex flex-col gap-4 p-6">
+                    <div className="flex flex-col gap-4 p-4 sm:p-6">
                       <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" />
                         <Input
@@ -305,107 +305,94 @@ export function RosterView({ member, roster, allPlayers }: RosterViewProps) {
                           onChange={(e) => setSearchQuery(e.target.value)}
                         />
                       </div>
-                      <div className="max-h-[350px] overflow-y-auto pr-1 custom-scrollbar">
-                        <Table>
-                          <TableHeader className="sticky top-0 bg-zinc-950 z-10 border-b border-zinc-800">
-                            <TableRow className="hover:bg-transparent border-zinc-800">
-                              <TableHead className="text-[10px] uppercase text-zinc-500 font-black h-8">
-                                Player
-                              </TableHead>
-                              <TableHead
-                                className="text-[10px] uppercase text-zinc-500 font-black h-8 cursor-pointer hover:text-white transition-colors text-right"
-                                onClick={() => toggleScoutSort("points")}
+                      <div className="max-h-[50vh] overflow-y-auto pr-1 custom-scrollbar">
+                        <div className="space-y-2">
+                          {allPlayers
+                            .filter((p) => p.role === slot.role)
+                            .filter((p) =>
+                              p.name
+                                .toLowerCase()
+                                .includes(searchQuery.toLowerCase()),
+                            )
+                            .filter(
+                              (p) => !roster.some((r) => r.player_id === p.id),
+                            )
+                            .sort((a, b) => {
+                              const aValue = a[scoutSort.key];
+                              const bValue = b[scoutSort.key];
+                              return scoutSort.direction === "asc"
+                                ? aValue - bValue
+                                : bValue - aValue;
+                            })
+                            .map((player) => (
+                              <div
+                                key={player.id}
+                                className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-3 hover:bg-zinc-900 hover:border-[#ff4655]/30 transition-all group"
                               >
-                                <div className="flex items-center justify-end">
-                                  Points
-                                  {scoutSort.key === "points" ? (
-                                    scoutSort.direction === "asc" ? (
-                                      <ChevronUp className="size-3 ml-1 text-[#ff4655]" />
-                                    ) : (
-                                      <ChevronDown className="size-3 ml-1 text-[#ff4655]" />
-                                    )
-                                  ) : (
-                                    <ArrowUpDown className="size-3 ml-1 opacity-30" />
-                                  )}
-                                </div>
-                              </TableHead>
-                              <TableHead
-                                className="text-[10px] uppercase text-zinc-500 font-black h-8 cursor-pointer hover:text-white transition-colors text-right"
-                                onClick={() => toggleScoutSort("current_price")}
-                              >
-                                <div className="flex items-center justify-end">
-                                  Price
-                                  {scoutSort.key === "current_price" ? (
-                                    scoutSort.direction === "asc" ? (
-                                      <ChevronUp className="size-3 ml-1 text-[#ff4655]" />
-                                    ) : (
-                                      <ChevronDown className="size-3 ml-1 text-[#ff4655]" />
-                                    )
-                                  ) : (
-                                    <ArrowUpDown className="size-3 ml-1 opacity-30" />
-                                  )}
-                                </div>
-                              </TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {allPlayers
-                              .filter((p) => p.role === slot.role)
-                              .filter((p) =>
-                                p.name
-                                  .toLowerCase()
-                                  .includes(searchQuery.toLowerCase()),
-                              )
-                              .filter(
-                                (p) =>
-                                  !roster.some((r) => r.player_id === p.id),
-                              )
-                              .sort((a, b) => {
-                                const aValue = a[scoutSort.key];
-                                const bValue = b[scoutSort.key];
-                                return scoutSort.direction === "asc"
-                                  ? aValue - bValue
-                                  : bValue - aValue;
-                              })
-                              .map((player) => (
-                                <TableRow
-                                  key={player.id}
-                                  className="border-zinc-800 hover:bg-zinc-900 group/row"
-                                >
-                                  <TableCell className="py-3">
-                                    <div className="flex flex-col gap-1">
-                                      <span className="font-black text-sm uppercase italic">
-                                        {player.name}
-                                      </span>
-                                      <span className="text-[10px] text-zinc-500 font-bold uppercase">
-                                        {player.team?.name} • {player.region}
-                                      </span>
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="font-black text-sm sm:text-base uppercase italic text-white truncate">
+                                      {player.name}
                                     </div>
-                                  </TableCell>
-                                  <TableCell className="text-right py-3">
-                                    <span className="text-[12px] text-emerald-500 font-black uppercase">
-                                      {player.points.toFixed(1)}
-                                    </span>
-                                  </TableCell>
-                                  <TableCell className="text-right py-3">
-                                    <Button
-                                      size="sm"
-                                      disabled={
-                                        isProcessing ||
-                                        member.budget < player.current_price
-                                      }
-                                      className="bg-zinc-700 hover:bg-emerald-500 h-8 text-[11px] uppercase font-black italic transition-all group-hover/row:scale-105 disabled:bg-[#ff4655]"
-                                      onClick={() =>
-                                        handleBuyPlayer(slot, player)
-                                      }
-                                    >
-                                      €{player.current_price}M
-                                    </Button>
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                          </TableBody>
-                        </Table>
+                                    <div className="text-[10px] sm:text-xs text-zinc-500 font-bold uppercase truncate">
+                                      {player.team?.name} • {player.region}
+                                    </div>
+                                    <div className="flex items-center gap-3 mt-2">
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-sm font-black text-emerald-400">
+                                          {player.points.toFixed(1)}
+                                        </span>
+                                        <span className="text-[9px] text-emerald-400 uppercase font-black pt-1">
+                                          PTS
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <Button
+                                    size="sm"
+                                    disabled={
+                                      isProcessing ||
+                                      member.budget < player.current_price
+                                    }
+                                    className="bg-zinc-700 hover:bg-emerald-500 h-9 px-3 text-xs sm:text-sm uppercase font-black italic transition-all group-hover:scale-105 disabled:bg-zinc-800 disabled:opacity-50 whitespace-nowrap"
+                                    onClick={() =>
+                                      handleBuyPlayer(slot, player)
+                                    }
+                                  >
+                                    €{player.current_price}M
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => toggleScoutSort("points")}
+                            className={`text-[10px] uppercase font-black px-3 py-1.5 rounded transition-colors ${
+                              scoutSort.key === "points"
+                                ? "bg-[#ff4655] text-white"
+                                : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                            }`}
+                          >
+                            Points{" "}
+                            {scoutSort.key === "points" &&
+                              (scoutSort.direction === "asc" ? "↑" : "↓")}
+                          </button>
+                          <button
+                            onClick={() => toggleScoutSort("current_price")}
+                            className={`text-[10px] uppercase font-black px-3 py-1.5 rounded transition-colors ${
+                              scoutSort.key === "current_price"
+                                ? "bg-[#ff4655] text-white"
+                                : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                            }`}
+                          >
+                            Price{" "}
+                            {scoutSort.key === "current_price" &&
+                              (scoutSort.direction === "asc" ? "↑" : "↓")}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </DialogContent>
