@@ -1,0 +1,387 @@
+"use client";
+
+import { useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+import {
+  Plus,
+  Trash2,
+  Search,
+  User as UserIcon,
+  AlertTriangle,
+} from "lucide-react";
+import { LeagueMember, RosterEntry, Player } from "@/lib/types";
+import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import { leaguesApi } from "@/lib/api";
+
+interface RosterViewProps {
+  member: LeagueMember;
+  roster: RosterEntry[];
+  allPlayers: Player[];
+}
+
+interface RosterSlot {
+  id: string;
+  role: string;
+  label: string;
+  isStarter: boolean;
+}
+
+const ROSTER_SLOTS: RosterSlot[] = [
+  { id: "d1", role: "Duelist", label: "Duelist 1", isStarter: true },
+  { id: "d2", role: "Duelist", label: "Duelist 2", isStarter: true },
+  { id: "c1", role: "Controller", label: "Controller 1", isStarter: true },
+  { id: "c2", role: "Controller", label: "Controller 2", isStarter: true },
+  { id: "i1", role: "Initiator", label: "Initiator 1", isStarter: true },
+  { id: "i2", role: "Initiator", label: "Initiator 2", isStarter: true },
+  { id: "s1", role: "Sentinel", label: "Sentinel 1", isStarter: true },
+  { id: "s2", role: "Sentinel", label: "Sentinel 2", isStarter: true },
+  { id: "b1", role: "Flex", label: "Bench 1", isStarter: false },
+  { id: "b2", role: "Flex", label: "Bench 2", isStarter: false },
+  { id: "b3", role: "Flex", label: "Bench 3", isStarter: false },
+];
+
+export function RosterView({ member, roster, allPlayers }: RosterViewProps) {
+  const queryClient = useQueryClient();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  // State for Scout Dialog
+  const [openDialogSlot, setOpenDialogSlot] = useState<string | null>(null);
+
+  // State for Release Confirmation Dialog
+  const [playerToRelease, setPlayerToRelease] = useState<{
+    id: number;
+    name: string;
+  } | null>(null);
+
+  const getPlayerInSlot = (slotLabel: string) => {
+    const entry = roster.find((r) => r.role_position === slotLabel);
+    if (!entry) return null;
+    return {
+      entry,
+      player: allPlayers.find((p) => p.id === entry.player_id),
+    };
+  };
+
+  const handleBuyPlayer = async (slot: RosterSlot, player: Player) => {
+    if (member.budget < player.current_price) {
+      toast.error("Insufficient funds for this transaction");
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      await leaguesApi.addPlayerToRoster(member.id, {
+        league_member_id: member.id,
+        player_id: player.id,
+        is_starter: slot.isStarter,
+        role_position: slot.label,
+      });
+
+      toast.success(`Signed ${player.name} to roster`);
+      setOpenDialogSlot(null);
+
+      queryClient.invalidateQueries({ queryKey: ["league-roster", member.id] });
+      queryClient.invalidateQueries({
+        queryKey: ["league-rankings", member.league_id],
+      });
+      queryClient.invalidateQueries({ queryKey: ["my-leagues"] });
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error.message || "Failed to sign player");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const confirmReleasePlayer = (rosterId: number, playerName: string) => {
+    setPlayerToRelease({ id: rosterId, name: playerName });
+  };
+
+  const handleSellPlayer = async () => {
+    if (!playerToRelease) return;
+
+    setIsProcessing(true);
+    try {
+      await leaguesApi.removePlayerFromRoster(playerToRelease.id);
+      toast.success(`Released ${playerToRelease.name} from contract`);
+
+      queryClient.invalidateQueries({ queryKey: ["league-roster", member.id] });
+      queryClient.invalidateQueries({
+        queryKey: ["league-rankings", member.league_id],
+      });
+      queryClient.invalidateQueries({ queryKey: ["my-leagues"] });
+      setPlayerToRelease(null);
+    } catch (error: any) {
+      toast.error("Failed to release player");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const rosterValue = roster.reduce((sum, entry) => {
+    const p = allPlayers.find((p) => p.id === entry.player_id);
+    return sum + (p?.current_price || 0);
+  }, 0);
+
+  return (
+    <div className="space-y-6">
+      {/* Stats Cards */}
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card className="bg-gradient-to-br from-zinc-900 to-zinc-950 border-zinc-800 overflow-hidden relative group">
+          <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-25 transition-opacity">
+            <h2 className="text-8xl font-black italic">BUDGET</h2>
+          </div>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs uppercase font-black tracking-[0.2em] text-zinc-500">
+              Available Capital
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <span className="text-5xl font-black text-[#ff4655] tracking-tighter italic">
+              €{member.budget.toFixed(1)}M
+            </span>
+          </CardContent>
+        </Card>
+        <Card className="bg-gradient-to-br from-zinc-900 to-zinc-950 border-zinc-800 overflow-hidden relative group">
+          <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-25 transition-opacity">
+            <h2 className="text-8xl font-black italic">VALUE</h2>
+          </div>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs uppercase font-black tracking-[0.2em] text-zinc-500">
+              Roster Net Worth
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <span className="text-5xl font-black text-white tracking-tighter italic">
+              €{rosterValue.toFixed(1)}M
+            </span>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Roster Grid */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {ROSTER_SLOTS.map((slot) => {
+          const slotData = getPlayerInSlot(slot.label);
+          const isOpen = openDialogSlot === slot.id;
+
+          return (
+            <Card
+              key={slot.id}
+              className="bg-zinc-900/40 border-zinc-800 relative overflow-hidden group min-h-[160px] hover:border-[#ff4655]/30 transition-all backdrop-blur-sm flex flex-col p-0 h-full"
+            >
+              {slotData ? (
+                // FILLED SLOT
+                <div className="p-4 flex flex-1 flex-col bg-gradient-to-t from-zinc-950/50 to-transparent h-full">
+                  <div className="flex justify-between items-start">
+                    <div className="bg-[#ff4655] text-white text-[8px] font-black uppercase px-2 py-0.5 rounded shadow-[0_2px_10px_rgba(255,70,85,0.4)]">
+                      {slot.label}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-6 text-zinc-600 hover:text-red-500 hover:bg-red-500/10 rounded-full"
+                      onClick={() =>
+                        confirmReleasePlayer(
+                          slotData.entry.id,
+                          slotData.player?.name || "Player",
+                        )
+                      }
+                      disabled={isProcessing}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
+                  <div className="flex flex-1 flex-col items-center justify-center min-h-0 py-4">
+                    <div className="size-16 rounded-full bg-zinc-800 flex items-center justify-center mb-2 border-2 border-zinc-700 group-hover:border-[#ff4655]/50 transition-colors shadow-inner overflow-hidden relative">
+                      {slotData.player?.team?.logo_url ? (
+                        <img
+                          src={slotData.player.team.logo_url}
+                          alt={slotData.player.team.name}
+                          className="size-full object-cover opacity-40 absolute inset-0"
+                        />
+                      ) : null}
+                      <UserIcon className="size-8 text-zinc-500 relative z-10" />
+                    </div>
+                    <span className="font-black text-white uppercase italic text-center leading-tight tracking-tight text-sm">
+                      {slotData.player?.name}
+                    </span>
+                    <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
+                      {slotData.player?.team?.name || "Independent"} •{" "}
+                      {slotData.player?.region}
+                    </span>
+                  </div>
+                  <div className="mt-auto flex justify-between w-full border-t border-zinc-800/50 pt-2 bg-zinc-950/30 p-2 rounded-lg">
+                    <div className="flex flex-col">
+                      <span className="text-[7px] text-zinc-500 uppercase font-black">
+                        Points
+                      </span>
+                      <span className="text-xs font-black text-emerald-400 italic">
+                        {slotData.player?.points}
+                      </span>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className="text-[7px] text-zinc-500 uppercase font-black">
+                        Contract
+                      </span>
+                      <span className="text-xs font-black text-white italic">
+                        €{slotData.player?.current_price}M
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                // EMPTY SLOT - SCOUT BUTTON
+                <Dialog
+                  open={isOpen}
+                  onOpenChange={(open) =>
+                    setOpenDialogSlot(open ? slot.id : null)
+                  }
+                >
+                  <DialogTrigger asChild>
+                    <div className="flex-1 flex items-center justify-center p-4 cursor-pointer">
+                      <button className="aspect-square w-full max-w-[120px] flex flex-col items-center justify-center gap-2 hover:bg-[#ff4655]/5 transition-all text-zinc-700 hover:text-[#ff4655] group/btn border-2 border-dashed border-zinc-800/50 rounded-xl">
+                        <Plus className="size-8 group-hover/btn:scale-110 transition-transform" />
+                        <span className="text-[10px] uppercase font-black tracking-widest text-center px-1">
+                          {slot.label}
+                        </span>
+                        <span className="text-[8px] text-zinc-800 font-black uppercase text-center px-2">
+                          Click to Scout
+                        </span>
+                      </button>
+                    </div>
+                  </DialogTrigger>
+                  <DialogContent className="bg-zinc-950 border-zinc-800 text-white sm:max-w-[480px] p-0 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+                    <div className="bg-[#ff4655] p-6">
+                      <DialogHeader>
+                        <DialogTitle className="uppercase italic font-black text-3xl text-white tracking-tighter">
+                          Scout{" "}
+                          <span className="text-zinc-900">{slot.role}</span>
+                        </DialogTitle>
+                      </DialogHeader>
+                    </div>
+                    <div className="flex flex-col gap-4 p-6">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-zinc-500" />
+                        <Input
+                          placeholder="Search VCT database..."
+                          className="pl-10 bg-zinc-900 border-zinc-800 text-white font-bold"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                      </div>
+                      <div className="max-h-[350px] overflow-y-auto pr-1 custom-scrollbar">
+                        <Table>
+                          <TableBody>
+                            {allPlayers
+                              .filter((p) => p.role === slot.role)
+                              .filter((p) =>
+                                p.name
+                                  .toLowerCase()
+                                  .includes(searchQuery.toLowerCase()),
+                              )
+                              .filter(
+                                (p) =>
+                                  !roster.some((r) => r.player_id === p.id),
+                              )
+                              .sort((a, b) => b.current_price - a.current_price)
+                              .map((player) => (
+                                <TableRow
+                                  key={player.id}
+                                  className="border-zinc-800 hover:bg-zinc-900 group/row"
+                                >
+                                  <TableCell className="py-3">
+                                    <div className="flex flex-col">
+                                      <span className="font-black text-sm uppercase italic">
+                                        {player.name}
+                                      </span>
+                                      <span className="text-[10px] text-zinc-500 font-bold uppercase">
+                                        {player.team?.name} • {player.region}
+                                      </span>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-right py-3">
+                                    <Button
+                                      size="sm"
+                                      disabled={
+                                        isProcessing ||
+                                        member.budget < player.current_price
+                                      }
+                                      className="bg-zinc-800 hover:bg-[#ff4655] h-8 text-[11px] uppercase font-black italic transition-all group-hover/row:scale-105 disabled:opacity-50"
+                                      onClick={() =>
+                                        handleBuyPlayer(slot, player)
+                                      }
+                                    >
+                                      €{player.current_price}M
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              )}
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* Release Confirmation Dialog */}
+      <Dialog
+        open={!!playerToRelease}
+        onOpenChange={(open) => !open && setPlayerToRelease(null)}
+      >
+        <DialogContent className="bg-zinc-950 border-zinc-800 text-white sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[#ff4655]">
+              <AlertTriangle className="size-5" />
+              CONFIRM RELEASE
+            </DialogTitle>
+            <DialogDescription className="text-zinc-400 pt-2">
+              Are you sure you want to release{" "}
+              <span className="text-white font-bold">
+                {playerToRelease?.name}
+              </span>
+              ?
+              <br />
+              You will receive their full current value back to your budget.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setPlayerToRelease(null)}
+              className="border-zinc-700 hover:bg-zinc-900 text-white"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSellPlayer}
+              disabled={isProcessing}
+              className="bg-[#ff4655] hover:bg-[#ff4655]/90 text-white font-bold"
+            >
+              {isProcessing ? "Processing..." : "Confirm Release"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

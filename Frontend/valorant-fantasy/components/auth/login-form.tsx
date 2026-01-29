@@ -7,7 +7,6 @@ import * as z from "zod";
 import { useAuth } from "@/lib/context/auth-context";
 import { LogIn, Mail, Lock, Loader2, AlertCircle } from "lucide-react";
 import Link from "next/link";
-import { toast } from "sonner"; // Optional: Good for side effects
 
 // 1. Zod Schema Definition
 const loginSchema = z.object({

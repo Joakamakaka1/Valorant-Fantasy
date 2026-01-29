@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { leaguesApi } from "@/lib/api";
-import { League, LeagueMember } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -14,58 +13,79 @@ import {
   CardFooter,
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Trophy, Plus, LogIn, Users } from "lucide-react";
+import { Plus, LogIn } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 export default function JoinLeaguePage() {
-  const [availableLeagues, setAvailableLeagues] = useState<League[]>([]);
-  const [myLeagues, setMyLeagues] = useState<LeagueMember[]>([]);
-  const [loading, setLoading] = useState(true);
   const [newLeagueName, setNewLeagueName] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [joinTeamName, setJoinTeamName] = useState("");
-  const [isJoining, setIsJoining] = useState(false);
   const router = useRouter();
+  const queryClient = useQueryClient();
 
-  const handleCreateLeague = async (e: React.FormEvent) => {
+  // Mutation for creating a league
+  const createLeagueMutation = useMutation({
+    mutationFn: (name: string) => leaguesApi.create(name, 10),
+    onSuccess: (newLeague) => {
+      toast.success(`League "${newLeague.name}" created!`);
+      // Invalidate queries to update sidebar/dashboard immediately
+      queryClient.invalidateQueries({ queryKey: ["my-leagues"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-overview"] });
+      router.push(`/dashboard/leagues/${newLeague.id}`);
+    },
+    onError: (error) => {
+      toast.error("Failed to create league");
+      console.error(error);
+    },
+  });
+
+  // Mutation for joining a league
+  const joinLeagueMutation = useMutation({
+    mutationFn: async ({
+      code,
+      teamName,
+    }: {
+      code: string;
+      teamName: string;
+    }) => {
+      // 1. Resolve code to league
+      const league = await leaguesApi.getByInviteCode(code.toUpperCase());
+      // 2. Join
+      await leaguesApi.join(league.id, teamName);
+      return league;
+    },
+    onSuccess: (league) => {
+      toast.success(`Joined league: ${league.name}`);
+      queryClient.invalidateQueries({ queryKey: ["my-leagues"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-overview"] });
+      router.push(`/dashboard/leagues/${league.id}`);
+    },
+    onError: (error: any) => {
+      toast.error(
+        error.response?.data?.error?.message ||
+          "Invalid invite code or already joined",
+      );
+    },
+  });
+
+  const handleCreateLeague = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newLeagueName) {
       toast.error("Please enter a league name");
       return;
     }
-    try {
-      const newLeague = await leaguesApi.create(newLeagueName, 10);
-      toast.success(`League "${newLeagueName}" created!`);
-      router.push(`/dashboard/leagues/${newLeague.id}`);
-    } catch (error) {
-      toast.error("Failed to create league");
-      console.error(error);
-    }
+    createLeagueMutation.mutate(newLeagueName);
   };
 
-  const handleJoinByCode = async (e: React.FormEvent) => {
+  const handleJoinByCode = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteCode || !joinTeamName) {
       toast.error("Please enter both invite code and your team name");
       return;
     }
-    setIsJoining(true);
-    try {
-      // 1. Resolve code to league
-      const league = await leaguesApi.getByInviteCode(inviteCode.toUpperCase());
-      // 2. Join
-      await leaguesApi.join(league.id, joinTeamName);
-      toast.success(`Joined league: ${league.name}`);
-      router.push(`/dashboard/leagues/${league.id}`);
-    } catch (error: any) {
-      toast.error(
-        error.response?.data?.error?.message ||
-          "Invalid invite code or already joined",
-      );
-    } finally {
-      setIsJoining(false);
-    }
+    joinLeagueMutation.mutate({ code: inviteCode, teamName: joinTeamName });
   };
 
   return (
@@ -109,8 +129,11 @@ export default function JoinLeaguePage() {
               <Button
                 type="submit"
                 className="w-full bg-[#ff4655] hover:bg-[#ff4655]/90"
+                disabled={createLeagueMutation.isPending}
               >
-                Create League
+                {createLeagueMutation.isPending
+                  ? "Creating..."
+                  : "Create League"}
               </Button>
             </CardFooter>
           </form>
@@ -155,9 +178,11 @@ export default function JoinLeaguePage() {
                 type="submit"
                 variant="outline"
                 className="w-full border-[#ff4655]/50 text-white hover:bg-[#ff4655]/10"
-                disabled={isJoining}
+                disabled={joinLeagueMutation.isPending}
               >
-                {isJoining ? "Joining..." : "Join Private League"}
+                {joinLeagueMutation.isPending
+                  ? "Joining..."
+                  : "Join Private League"}
               </Button>
             </CardFooter>
           </form>

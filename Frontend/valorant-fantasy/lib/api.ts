@@ -122,50 +122,79 @@ export const authApi = {
 };
 
 export const leaguesApi = {
-  getAll: () => api.get<League[]>("/leagues"),
-  getMyLeagues: () => api.get<LeagueMember[]>("/leagues/my"),
-  getById: (id: number) => api.get<League>(`/leagues/${id}`),
-  getByInviteCode: (code: string) => api.get<League>(`/leagues/invite/${code}`),
-  getRankings: (leagueId: number) =>
-    api.get<LeagueMember[]>(`/leagues/${leagueId}/rankings`),
-  getMembers: (leagueId: number) =>
-    api.get<LeagueMember[]>(`/leagues/${leagueId}/members`),
-  getMemberRoster: (memberId: number) =>
-    api.get<RosterEntry[]>(`/leagues/members/${memberId}/roster`),
-  addPlayerToRoster: (memberId: number, data: any) =>
-    api.post<RosterEntry>(`/leagues/members/${memberId}/roster`, data),
-  removePlayerFromRoster: (rosterId: number) =>
-    api.delete<void>(`/leagues/roster/${rosterId}`),
-  updateMember: (memberId: number, data: any) =>
-    api.patch<LeagueMember>(`/leagues/members/${memberId}`, data),
-  create: (name: string, maxTeams: number) =>
-    api.post<League>("/leagues/", {
-      name,
-      max_teams: maxTeams,
-    }),
-  join: (leagueId: number, teamName: string) =>
+  getAll: (config?: import("axios").AxiosRequestConfig) =>
+    api.get<League[]>("/leagues", config),
+  getMyLeagues: (config?: import("axios").AxiosRequestConfig) =>
+    api.get<LeagueMember[]>("/leagues/my", config),
+  getById: (id: number, config?: import("axios").AxiosRequestConfig) =>
+    api.get<League>(`/leagues/${id}`, config),
+  getByInviteCode: (
+    code: string,
+    config?: import("axios").AxiosRequestConfig,
+  ) => api.get<League>(`/leagues/invite/${code}`, config),
+  getRankings: (
+    leagueId: number,
+    config?: import("axios").AxiosRequestConfig,
+  ) => api.get<LeagueMember[]>(`/leagues/${leagueId}/rankings`, config),
+  getMembers: (leagueId: number, config?: import("axios").AxiosRequestConfig) =>
+    api.get<LeagueMember[]>(`/leagues/${leagueId}/members`, config),
+  getMemberRoster: (
+    memberId: number,
+    config?: import("axios").AxiosRequestConfig,
+  ) => api.get<RosterEntry[]>(`/leagues/members/${memberId}/roster`, config),
+  addPlayerToRoster: (
+    memberId: number,
+    data: any,
+    config?: import("axios").AxiosRequestConfig,
+  ) =>
+    api.post<RosterEntry>(`/leagues/members/${memberId}/roster`, data, config),
+  removePlayerFromRoster: (
+    rosterId: number,
+    config?: import("axios").AxiosRequestConfig,
+  ) => api.delete<void>(`/leagues/roster/${rosterId}`, config),
+  updateMember: (
+    memberId: number,
+    data: any,
+    config?: import("axios").AxiosRequestConfig,
+  ) => api.patch<LeagueMember>(`/leagues/members/${memberId}`, data, config),
+  create: (
+    name: string,
+    maxTeams: number,
+    config?: import("axios").AxiosRequestConfig,
+  ) =>
+    api.post<League>(
+      "/leagues/",
+      {
+        name,
+        max_teams: maxTeams,
+      },
+      config,
+    ),
+  join: (
+    leagueId: number,
+    teamName: string,
+    config?: import("axios").AxiosRequestConfig,
+  ) =>
     api.post<LeagueMember>(`/leagues/${leagueId}/join`, null, {
+      ...config,
       params: { team_name: teamName },
     }),
 };
 
 export const professionalApi = {
-  getPlayers: (params?: any) =>
-    api.get<Player[]>("/professional/players", { params }),
-  getTeams: (params?: any) =>
-    api.get<Team[]>("/professional/teams", { params }),
+  getPlayers: (params?: any, config?: import("axios").AxiosRequestConfig) =>
+    api.get<Player[]>("/professional/players", { params, ...config }),
+  getTeams: (params?: any, config?: import("axios").AxiosRequestConfig) =>
+    api.get<Team[]>("/professional/teams", { params, ...config }),
 };
 
 export const matchesApi = {
-  getAll: (params?: any) => api.get<Match[]>("/matches", { params }),
+  getAll: (params?: any, config?: import("axios").AxiosRequestConfig) =>
+    api.get<Match[]>("/matches", { params, ...config }),
   getPlayerStats: (playerId: number, recent?: number) =>
     api.get<any[]>(`/matches/players/${playerId}/stats`, {
       params: { recent },
     }),
-};
-
-export const dashboardApi = {
-  getOverview: () => api.get<DashboardOverview>("/dashboard/overview"),
 };
 
 export default api;
