@@ -11,7 +11,7 @@ import { MatchesSkeleton } from "./matches-skeleton";
 import { AlertCircle } from "lucide-react";
 
 export function MatchesView() {
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("live");
 
   const {
     data: allMatches = [],
@@ -34,8 +34,8 @@ export function MatchesView() {
   // Filter client-side
   const filteredMatches = allMatches.filter((match) => {
     if (statusFilter === "all") return true;
-    if (statusFilter === "upcoming")
-      return match.status === "upcoming" || match.status === "live";
+    if (statusFilter === "upcoming") return match.status === "upcoming";
+    if (statusFilter === "live") return match.status === "live";
     if (statusFilter === "completed") return match.status === "completed";
     return true;
   });
@@ -54,12 +54,18 @@ export function MatchesView() {
         </div>
 
         <Tabs
-          defaultValue="all"
+          defaultValue="live"
           value={statusFilter}
           onValueChange={setStatusFilter}
           className="w-full"
         >
           <TabsList className="bg-zinc-900/40 border border-zinc-800 w-full justify-start p-1 h-12 rounded-xl">
+            <TabsTrigger
+              value="live"
+              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-600 data-[state=active]:to-red-500 data-[state=active]:text-white px-8 font-black uppercase italic tracking-tighter rounded-lg transition-all animate-pulse data-[state=active]:animate-pulse"
+            >
+              🔴 Live
+            </TabsTrigger>
             <TabsTrigger
               value="all"
               className="data-[state=active]:bg-zinc-800 data-[state=active]:text-white px-8 font-black uppercase italic tracking-tighter rounded-lg transition-all"
@@ -92,13 +98,20 @@ export function MatchesView() {
               again.
             </p>
           </div>
-        ) : filteredMatches.length === 0 ? (
-          <p className="text-zinc-500 italic">No matches found.</p>
         ) : (
-          <div className="grid gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {filteredMatches.map((match) => (
-              <MatchCard key={match.id} match={match} />
-            ))}
+          <div
+            key={statusFilter}
+            className="animate-in fade-in slide-in-from-bottom-4 duration-500"
+          >
+            {filteredMatches.length === 0 ? (
+              <p className="text-zinc-500 italic">No matches found.</p>
+            ) : (
+              <div className="grid gap-4">
+                {filteredMatches.map((match) => (
+                  <MatchCard key={match.id} match={match} />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -69,7 +69,11 @@ class SyncService:
             logger.info(f"--- SYNCING EVENT: {event['name']} ---")
             match_urls = await self.scraper.get_match_urls_from_event(event["path"])
             
-            for match_url in match_urls:
+            for match_info in match_urls:
+                # match_info es ahora un dict: {"url": "/123/...", "status": "live|upcoming|completed"}
+                match_url = match_info["url"] if isinstance(match_info, dict) else match_info
+                detected_status = match_info.get("status", "unknown") if isinstance(match_info, dict) else "unknown"
+                
                 # Respetar rate limits del servidor externo
                 logger.info(f"Throttling: Waiting 1.5s...")
                 await asyncio.sleep(1.5)
@@ -81,8 +85,18 @@ class SyncService:
                 
                 # Verificar si ya tenemos este partido procesado correctamente
                 existing_match = await self.match_service.repo.get_by_vlr_match_id(vlr_id)
-                if existing_match and existing_match.is_processed:
+                
+                # CAMBIO IMPORTANTE: Solo saltar si está completed Y processed
+                # Permitir actualización de partidos live o upcoming
+                if existing_match and existing_match.is_processed and existing_match.status == "completed":
+                    logger.debug(f"Match {vlr_id} already processed and completed, skipping")
                     continue
+                
+                # Si es live, siempre actualizar (puede que haya terminado)
+                if existing_match and existing_match.status == "live":
+                    logger.info(f"Updating LIVE match {vlr_id} (detected: {detected_status}) to check if completed")
+                elif existing_match and detected_status == "live":
+                    logger.info(f"Match {vlr_id} is now LIVE (was {existing_match.status})")
 
                 details = await self.scraper.scrape_match_details(match_url)
                 if not details: continue
@@ -120,19 +134,28 @@ class SyncService:
     async def _sync_match_details(self, vlr_id: str, event: Dict[str, Any], details: Dict[str, Any], existing_match: Optional[Match]):
         """Procesa los detalles de un partido dentro de una transacción garantizando consistencia."""
         
-        # Detectar si hay estadísticas reales (kills > 0)
-        has_stats = any(p["kills"] > 0 or p["rating"] > 0 for p in details["players"])
+        # USAR STATUS DEL SCRAPER (confiar en la detección del scraper)
+        status = details.get("status", "upcoming")
         
-        # Si no hay stats, es upcoming. Si es upcoming, los scores SON 0-0 obligatoriamente.
-        # Esto evita que se guarde la fecha (ej: dia 15) como goles (15-0).
-        if has_stats:
-            status = "completed"
-            final_score_a = details.get("scores", [0, 0])[0]
-            final_score_b = details.get("scores", [0, 0])[1]
-        else:
-            status = "upcoming"
+        # Verificar si hay stats reales (para logging y validaciones)
+        has_real_stats = any(p["kills"] > 0 or p["rating"] > 0 for p in details["players"])
+        
+        # Scores: Si es upcoming, forzar 0-0
+        if status == "upcoming":
             final_score_a = 0
             final_score_b = 0
+        else:
+            final_score_a = details.get("scores", [0, 0])[0]
+            final_score_b = details.get("scores", [0, 0])[1]
+            
+            # Validación: scores deben ser razonables (0-3 típicamente en BO3/BO5)
+            if final_score_a > 3 or final_score_b > 3:
+                logger.error(f"Match {vlr_id}: Invalid scores {final_score_a}-{final_score_b} (BO3 max is 2-1), resetting to 0-0")
+                final_score_a = 0
+                final_score_b = 0
+                # Si los scores son inválidos, probablemente el scraper falló
+                if status == "completed":
+                    status = "upcoming"  # Resetear a upcoming si los datos son inconsistentes
 
         # 2. Procesar Equipos: asegurar que existen en la DB
         team_models = []
@@ -180,37 +203,44 @@ class SyncService:
             if not match_data["date"]:
                 match_data.pop("date")
             
+            # Log status changes
+            old_status = existing_match.status
+            if old_status != status:
+                logger.info(f"Match {vlr_id} status changed: {old_status} → {status}")
+            
             await self.match_service.update(existing_match.id, match_data)
 
         # 4. Procesar Jugadores y Estadísticas
-        stats_created = 0
-        stats_updated = 0
-        
-        for p_stats in details["players"]:
-            try:
-                current_team = team_models[0] if p_stats["team_index"] == 0 else team_models[1]
-                
-                # Buscar o crear jugador
-                player = await self.player_service.repo.get_by_name(p_stats["name"])
-                if not player:
-                    try:
-                        player = await self.player_service.create(
-                            name=p_stats["name"], role=self.infer_role(p_stats["agent"]),
-                            region=event["region"], team_id=current_team.id,
-                            base_price=10.0, current_price=10.0
-                        )
-                    except AlreadyExistsException:
-                        # Concurrencia: si se creó justo en otro hilo
-                        player = await self.player_service.repo.get_by_name(p_stats["name"])
-                
-                if not player: continue # Skip si falló todo
+        # Solo procesamos stats si el partido está completado
+        if status != "completed":
+            logger.debug(f"Match {vlr_id} status={status}, skipping player stats processing")
+        else:
+            stats_created = 0
+            stats_updated = 0
+            
+            for p_stats in details["players"]:
+                try:
+                    current_team = team_models[0] if p_stats["team_index"] == 0 else team_models[1]
+                    
+                    # Buscar o crear jugador
+                    player = await self.player_service.repo.get_by_name(p_stats["name"])
+                    if not player:
+                        try:
+                            player = await self.player_service.create(
+                                name=p_stats["name"], role=self.infer_role(p_stats["agent"]),
+                                region=event["region"], team_id=current_team.id,
+                                base_price=10.0, current_price=10.0
+                            )
+                        except AlreadyExistsException:
+                            # Concurrencia: si se creó justo en otro hilo
+                            player = await self.player_service.repo.get_by_name(p_stats["name"])
+                    
+                    if not player: continue # Skip si falló todo
 
-                # Actualizar equipo del jugador si ha cambiado (importante para TBD -> Equipo Real)
-                if player.team_id != current_team.id:
-                    await self.player_service.update(player.id, {"team_id": current_team.id})
+                    # Actualizar equipo del jugador si ha cambiado (importante para TBD -> Equipo Real)
+                    if player.team_id != current_team.id:
+                        await self.player_service.update(player.id, {"team_id": current_team.id})
 
-                # Solo procesamos stats si el partido está completado
-                if status == "completed":
                     # Datos limpios de la estadística
                     stat_data = {
                         "agent": p_stats["agent"],
@@ -250,13 +280,26 @@ class SyncService:
                         self.db.add(new_stat)
                         stats_created += 1
 
-            except Exception as e:
-                logger.error(f"Error procesando jugador {p_stats.get('name')}: {e}")
-                continue
-
-        if status == "completed":
+                except Exception as e:
+                    logger.error(f"Error procesando jugador {p_stats.get('name')}: {e}")
+                    continue
+            
+            # Log stats processing results
             logger.info(f"Match {existing_match.vlr_match_id}: Stats Created={stats_created}, Updated={stats_updated}")
+
+        # Marcar como procesado y actualizar precios solo si está completed
+        if status == "completed":
             await self.match_service.mark_as_processed(existing_match.id)
+            logger.info(f"Match {existing_match.vlr_match_id} marked as processed (completed)")
+        elif status == "live":
+            # Asegurar que live matches NO estén marcados como processed
+            if existing_match.is_processed:
+                await self.match_service.update(existing_match.id, {"is_processed": False})
+                logger.info(f"Match {existing_match.vlr_match_id} set to is_processed=False (LIVE)")
+            logger.info(f"Match {existing_match.vlr_match_id} is LIVE, will check again later")
+        
+        # Solo actualizar precios si el partido está realmente completado
+        if status == "completed":
             
             # Recargar con relaciones para actualización global
             # Usamos populate_existing() para asegurar que traemos datos frescos de la misma sesión
@@ -268,6 +311,8 @@ class SyncService:
             
             # Actualizar puntos y precios
             await self.update_player_global_stats(match_with_stats)
+        else:
+            logger.debug(f"Match {existing_match.vlr_match_id} status={status}, skipping price/points update")
 
     async def sync_kickoff_2026(self):
         return await self.sync_vct_kickoff_comprehensive()

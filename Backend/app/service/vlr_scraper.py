@@ -123,6 +123,45 @@ class VLRScraper:
             response.raise_for_status()
             return response.text
 
+    def _detect_match_status(self, soup: BeautifulSoup) -> str:
+        """
+        Detecta el estado actual del partido desde la página.
+        
+        Returns:
+            "live", "upcoming", o "completed"
+        """
+        # Buscar indicador de LIVE en el header
+        live_indicator = soup.select_one(".match-header-note .match-header-note-text")
+        if live_indicator and "LIVE" in live_indicator.text.upper():
+            return "live"
+        
+        # Alternativa: buscar badge en el vs-score
+        live_badge = soup.select_one(".match-header-vs-note")
+        if live_badge and "LIVE" in live_badge.text.upper():
+            return "live"
+        
+        # Buscar badge o notificación de final
+        final_badge = soup.select_one(".match-header-vs-note")
+        if final_badge and ("FINAL" in final_badge.text.upper() or "COMPLETE" in final_badge.text.upper()):
+            return "completed"
+        
+        # Si hay scores válidos (ambos > 0 y alguno ganó), probablemente es completed
+        score_container = soup.select_one(".match-header-vs-score")
+        if score_container:
+            score_spans = score_container.select("span.js-spoiler")
+            if len(score_spans) >= 2:
+                try:
+                    score_a = int(score_spans[0].text.strip())
+                    score_b = int(score_spans[1].text.strip())
+                    # Si hay un ganador (uno tiene 2 en BO3), es completed
+                    if (score_a == 2 or score_b == 2) and (score_a != score_b):
+                        return "completed"
+                except (ValueError, AttributeError):
+                    pass
+        
+        # Por defecto, upcoming
+        return "upcoming"
+
     async def scrape_match_details(self, match_page_url: str) -> Optional[Dict[str, Any]]:
         full_url = f"{self.vlr_base_url}{match_page_url}"
         try:
@@ -280,41 +319,77 @@ class VLRScraper:
                     match_date = datetime.strptime(date_info.get("data-utc-ts"), "%Y-%m-%d %H:%M:%S")
                 except: pass
 
-            # Mejor detección de scores usando clases específicas en lugar de índices
+            # Detectar status del partido
+            status = self._detect_match_status(soup)
+            
+            # Mejorar extracción de scores con múltiples fallbacks
             scores = [0, 0]
-            score_container = soup.select_one(".match-header-vs-score")
-            if score_container:
-                # Intentar buscar por las clases específicas de left/right
-                score_a_elem = score_container.select_one(".match-header-vs-score-winner") or \
-                               score_container.select_one(".js-spoiler span:first-child")
-                               
-                # Si es complicado por selectores, cogemos todos los números del header
-                all_nums = re.findall(r'\d+', score_container.text)
-                if len(all_nums) >= 2:
-                    # Normalmente son los dos números más grandes o los únicos
-                    scores[0] = int(all_nums[0])
-                    scores[1] = int(all_nums[-1]) # A veces hay un ':' en medio
+            
+            if status in ["live", "completed"]:
+                score_container = soup.select_one(".match-header-vs-score")
+                
+                if score_container:
+                    # Método 1: Buscar spans con clase js-spoiler
+                    score_spans = score_container.select("span.js-spoiler")
+                    if len(score_spans) >= 2:
+                        try:
+                            scores[0] = int(score_spans[0].text.strip())
+                            scores[1] = int(score_spans[1].text.strip())
+                            logger.debug(f"Scores extracted (method 1): {scores}")
+                        except (ValueError, AttributeError):
+                            pass
+                    
+                    # Método 2 (Fallback): Buscar divs hijos directos
+                    if scores == [0, 0]:
+                        score_divs = score_container.find_all("div", recursive=False)
+                        score_texts = []
+                        for div in score_divs:
+                            text = div.get_text(strip=True)
+                            # Filtrar solo números de 1 dígito (0-3 típicamente en BO3/BO5)
+                            if text.isdigit() and len(text) == 1:
+                                score_texts.append(int(text))
+                        
+                        if len(score_texts) >= 2:
+                            scores[0] = score_texts[0]
+                            scores[1] = score_texts[1]
+                            logger.debug(f"Scores extracted (method 2): {scores}")
+                    
+                    # Método 3 (Último recurso): Regex pero solo números de 1 dígito
+                    if scores == [0, 0]:
+                        # Buscar solo dígitos individuales (0-9) evitando fechas/timestamps
+                        single_digits = re.findall(r'\b(\d)\b', score_container.text)
+                        if len(single_digits) >= 2:
+                            scores[0] = int(single_digits[0])
+                            scores[1] = int(single_digits[1])
+                            logger.debug(f"Scores extracted (method 3): {scores}")
+                    
+                    # Validación final: scores deben ser razonables (0-3 normalmente)
+                    if scores[0] > 5 or scores[1] > 5:
+                        logger.warning(f"Invalid scores detected: {scores}, resetting to [0, 0]")
+                        scores = [0, 0]
 
             return {
                 "teams": teams,
                 "players": players_stats,
                 "date": match_date,
-                "scores": scores
+                "scores": scores,
+                "status": status  # Incluir status detectado
             }
         except Exception as e:
             logger.error(f"Error scraping match {match_page_url}: {e}")
             return None
 
     @async_retry_with_backoff(max_retries=3, base_delay=1.5, max_delay=20.0)
-    async def get_match_urls_from_event(self, event_path: str) -> List[str]:
+    async def get_match_urls_from_event(self, event_path: str) -> List[Dict[str, str]]:
         """
         Scraps match URLs from an event page con reintentos automáticos.
+        Retorna también el status detectado (live/upcoming/completed).
         
         Args:
             event_path: Path del evento (e.g., '/event/1234/champions-2024')
             
         Returns:
-            Lista de URLs de partidos encontrados
+            Lista de dicts con {"url": str, "status": str}
         """
         url = f"{self.vlr_base_url}{event_path}"
         try:
@@ -322,18 +397,46 @@ class VLRScraper:
             html_content = await self._fetch_with_retry(url)
             soup = BeautifulSoup(html_content, 'html.parser')
             
-            match_links = []
-            all_links = soup.find_all("a")
-            for a in all_links:
-                href = a.get("href", "")
+            match_data = []
+            processed_urls = set()
+            
+            # Buscar match cards (tienen la clase wf-module-item)
+            all_links = soup.find_all("a", class_="wf-module-item")
+            
+            for match_card in all_links:
+                href = match_card.get("href", "")
                 match_pattern = re.search(r'^/(\d{5,})/', href) or re.search(r'/match/(\d{5,})/', href)
                 
-                if match_pattern and not any(x in href for x in ["/news/", "/event/", "/rankings/", "/forum/", "/player/", "/team/"]):
-                    clean_href = href.split("?")[0].split("#")[0]
-                    if clean_href not in match_links:
-                        match_links.append(clean_href)
+                if not match_pattern:
+                    continue
+                    
+                if any(x in href for x in ["/news/", "/event/", "/rankings/", "/forum/", "/player/", "/team/"]):
+                    continue
+                
+                clean_href = href.split("?")[0].split("#")[0]
+                
+                if clean_href in processed_urls:
+                    continue
+                
+                processed_urls.add(clean_href)
+                
+                # Detectar status desde la card del partido
+                status_elem = match_card.select_one(".ml-status")
+                eta_elem = match_card.select_one(".ml-eta")
+                
+                status = "upcoming"  # Default
+                if status_elem and "LIVE" in status_elem.text.upper():
+                    status = "live"
+                elif eta_elem and "ago" in eta_elem.text:
+                    status = "completed"
+                
+                match_data.append({
+                    "url": clean_href,
+                    "status": status
+                })
             
-            return match_links
+            logger.info(f"Found {len(match_data)} matches from {event_path} (live: {sum(1 for m in match_data if m['status'] == 'live')}, completed: {sum(1 for m in match_data if m['status'] == 'completed')}, upcoming: {sum(1 for m in match_data if m['status'] == 'upcoming')})")
+            return match_data
         except Exception as e:
             logger.error(f"Error fetching match URLs from {event_path}: {e}")
             return []
