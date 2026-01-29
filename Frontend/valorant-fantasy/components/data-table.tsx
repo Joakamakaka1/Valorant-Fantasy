@@ -9,6 +9,8 @@ import {
   TableHeader as ShadcnTableHeader,
   TableRow as ShadcnTableRow,
 } from "@/components/ui/table";
+import { ArrowUpDown, ChevronDown, ChevronUp } from "lucide-react";
+import { useMemo, useState } from "react";
 
 interface PlayerData {
   id: string;
@@ -17,6 +19,7 @@ interface PlayerData {
   role: string;
   points: number;
   price: string;
+  rawPrice: number; // Added for numeric sorting
 }
 
 interface DataTableProps {
@@ -33,10 +36,46 @@ export function DataTable({
   onRegionChange,
 }: DataTableProps) {
   const regions = ["ALL", "AMERICAS", "EMEA", "PACIFIC", "CN"];
+  const [sortConfig, setSortConfig] = useState<{
+    key: "points" | "rawPrice" | null;
+    direction: "asc" | "desc";
+  }>({ key: null, direction: "desc" });
+
+  const handleSort = (key: "points" | "rawPrice") => {
+    setSortConfig((prev) => ({
+      key,
+      direction: prev.key === key && prev.direction === "desc" ? "asc" : "desc",
+    }));
+  };
+
+  const sortedData = useMemo(() => {
+    if (!sortConfig.key) return data;
+
+    return [...data].sort((a, b) => {
+      const aValue = a[sortConfig.key!];
+      const bValue = b[sortConfig.key!];
+
+      if (sortConfig.direction === "asc") {
+        return aValue > bValue ? 1 : -1;
+      } else {
+        return aValue < bValue ? 1 : -1;
+      }
+    });
+  }, [data, sortConfig]);
+
+  const SortIcon = ({ column }: { column: "points" | "rawPrice" }) => {
+    if (sortConfig.key !== column)
+      return <ArrowUpDown className="ml-2 size-3 opacity-30" />;
+    return sortConfig.direction === "asc" ? (
+      <ChevronUp className="ml-2 size-3 text-[#ff4655]" />
+    ) : (
+      <ChevronDown className="ml-2 size-3 text-[#ff4655]" />
+    );
+  };
 
   return (
     <div className="w-full space-y-4">
-      <div className="flex items-center gap-2 border-b border-zinc-800/50 pb-4">
+      <div className="flex items-center gap-2 pb-4">
         {regions.map((region) => (
           <Button
             key={region}
@@ -67,17 +106,27 @@ export function DataTable({
               <ShadcnTableHead className="text-[10px] uppercase text-zinc-500 font-black italic tracking-widest text-center">
                 Protocol Role
               </ShadcnTableHead>
-              <ShadcnTableHead className="text-[10px] uppercase text-zinc-500 font-black italic tracking-widest text-center">
-                Fantasy Points
+              <ShadcnTableHead
+                className="text-[10px] uppercase text-zinc-500 font-black italic tracking-widest text-center cursor-pointer hover:text-white transition-colors"
+                onClick={() => handleSort("points")}
+              >
+                <div className="flex items-center justify-center">
+                  Fantasy Points <SortIcon column="points" />
+                </div>
               </ShadcnTableHead>
-              <ShadcnTableHead className="text-[10px] uppercase text-zinc-500 font-black italic tracking-widest text-right pr-6">
-                Market Valuation
+              <ShadcnTableHead
+                className="text-[10px] uppercase text-zinc-500 font-black italic tracking-widest text-right pr-6 cursor-pointer hover:text-white transition-colors"
+                onClick={() => handleSort("rawPrice")}
+              >
+                <div className="flex items-center justify-end">
+                  Market Valuation <SortIcon column="rawPrice" />
+                </div>
               </ShadcnTableHead>
             </ShadcnTableRow>
           </ShadcnTableHeader>
           <ShadcnTableBody>
-            {data.length > 0 ? (
-              data.map((row) => (
+            {sortedData.length > 0 ? (
+              sortedData.map((row) => (
                 <ShadcnTableRow
                   key={row.id}
                   className="hover:bg-white/5 cursor-pointer transition-colors border-zinc-800/20 group h-16"

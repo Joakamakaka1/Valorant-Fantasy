@@ -1,22 +1,20 @@
 "use client";
 
-import { SidebarInset } from "@/components/ui/sidebar";
 import { SiteHeader } from "@/components/site-header";
+import { Button } from "@/components/ui/button";
+import { SidebarInset } from "@/components/ui/sidebar";
+import { professionalApi } from "@/lib/api";
 import { useAuth } from "@/lib/context/auth-context";
+import { useQuery } from "@tanstack/react-query";
 import {
+  Play,
+  ShieldAlert,
+  Swords,
+  TrendingUp,
   Trophy,
   Users,
-  Swords,
-  ArrowRight,
-  Play,
-  Gamepad2,
-  TrendingUp,
-  ShieldAlert,
 } from "lucide-react";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { useQuery } from "@tanstack/react-query";
-import { professionalApi } from "@/lib/api";
 
 export function DashboardView() {
   const { user } = useAuth();
@@ -40,9 +38,8 @@ export function DashboardView() {
         {/* HERO SECTION */}
         <div className="relative w-full min-h-[450px] rounded-3xl overflow-hidden group shadow-xl border border-zinc-800 flex items-center transition-all hover:shadow-2xl hover:border-zinc-700">
           {/* Background Gradient/Image */}
-          <div className="absolute inset-0 bg-[url('https://images.contentstack.io/v3/assets/bltb6530b271fddd0b1/blt5696145391d4715f/61d900662e60ce67201c13bc/Episode_4_Act_1_Key_Art.jpg')] bg-cover bg-center transition-transform duration-700 group-hover:scale-105 opacity-80" />
+          <div className="absolute inset-0 bg-[url('/fondo_overview.webp')] bg-cover bg-[center_top_25%] transition-transform duration-700 group-hover:scale-105 opacity-80" />
           <div className="absolute inset-0 bg-gradient-to-r from-[#0f1923] via-[#0f1923]/90 to-transparent" />
-
           <div className="relative h-full flex flex-col justify-center p-10 md:p-16 max-w-3xl gap-6">
             <div className="flex items-center gap-3">
               <span className="bg-[#ff4655] text-white px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-sm shadow-[0_0_10px_rgba(255,70,85,0.4)]">
@@ -86,7 +83,7 @@ export function DashboardView() {
           {/* CARD 1: LEAGUES */}
           <Link
             href="/dashboard/leagues/join"
-            className="group relative h-[240px] rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900/50 hover:border-[#ff4655]/50 transition-all shadow-lg hover:shadow-[#ff4655]/10"
+            className="group relative h-[240px] rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900/40 hover:border-[#ff4655]/50 transition-all shadow-lg hover:shadow-[#ff4655]/10"
           >
             <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(68,68,68,.2)_50%,transparent_75%,transparent_100%)] bg-[length:250%_250%,100%_100%] bg-[position:-100%_0,0_0] bg-no-repeat transition-[background-position_0s_ease] hover:bg-[position:200%_0,0_0] hover:duration-[1500ms]" />
             <div className="absolute top-0 right-0 p-6 opacity-20 group-hover:opacity-40 transition-opacity">
@@ -108,7 +105,7 @@ export function DashboardView() {
           {/* CARD 2: PLAYERS/DATABASE */}
           <Link
             href="/dashboard/database/players"
-            className="group relative h-[240px] rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900/50 hover:border-purple-500/50 transition-all shadow-lg hover:shadow-purple-500/10"
+            className="group relative h-[240px] rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900/40 hover:border-purple-500/50 transition-all shadow-lg hover:shadow-purple-500/10"
           >
             <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(68,68,68,.2)_50%,transparent_75%,transparent_100%)] bg-[length:250%_250%,100%_100%] bg-[position:-100%_0,0_0] bg-no-repeat transition-[background-position_0s_ease] hover:bg-[position:200%_0,0_0] hover:duration-[1500ms]" />
             <div className="absolute top-0 right-0 p-6 opacity-20 group-hover:opacity-40 transition-opacity">
@@ -130,7 +127,7 @@ export function DashboardView() {
           {/* CARD 3: MATCHES */}
           <Link
             href="/dashboard/database/matches"
-            className="group relative h-[240px] rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900/50 hover:border-emerald-500/50 transition-all shadow-lg hover:shadow-emerald-500/10"
+            className="group relative h-[240px] rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900/40 hover:border-emerald-500/50 transition-all shadow-lg hover:shadow-emerald-500/10"
           >
             <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(68,68,68,.2)_50%,transparent_75%,transparent_100%)] bg-[length:250%_250%,100%_100%] bg-[position:-100%_0,0_0] bg-no-repeat transition-[background-position_0s_ease] hover:bg-[position:200%_0,0_0] hover:duration-[1500ms]" />
             <div className="absolute top-0 right-0 p-6 opacity-20 group-hover:opacity-40 transition-opacity">
@@ -152,7 +149,7 @@ export function DashboardView() {
 
         {/* BOTTOM SECTION - FEATURED or NEWS */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pb-8">
-          <div className="lg:col-span-2 bg-zinc-900/40 border border-zinc-800/50 rounded-2xl p-8 flex flex-col gap-6 hover:bg-zinc-900/60 transition-colors">
+          <div className="lg:col-span-2 bg-zinc-900/40 border border-zinc-800/50 rounded-2xl p-8 flex flex-col gap-6  transition-colors">
             <div className="flex items-center gap-3 text-[#ff4655]">
               <div className="p-2 bg-[#ff4655]/10 rounded-lg">
                 <TrendingUp className="size-6" />
@@ -166,10 +163,10 @@ export function DashboardView() {
                 topPlayers.map((player, i) => (
                   <div
                     key={player.id}
-                    className="flex items-center justify-between bg-zinc-950/80 p-4 rounded-xl border border-zinc-800/50 transition-all hover:border-[#ff4655]/50 hover:shadow-lg group"
+                    className="flex items-center justify-between bg-zinc-950/20 p-4 rounded-xl border border-zinc-800/50 transition-all hover:border-[#ff4655]/50 hover:shadow-lg group"
                   >
                     <div className="flex items-center gap-4">
-                      <div className="size-12 rounded-xl bg-zinc-800 border border-zinc-700 overflow-hidden relative flex items-center justify-center shadow-inner group-hover:border-[#ff4655]/30 transition-colors">
+                      <div className="size-12 rounded-xl bg-zinc-950 border border-zinc-700 overflow-hidden relative flex items-center justify-center shadow-inner group-hover:border-[#ff4655]/30 transition-colors ">
                         {player.team?.logo_url ? (
                           <img
                             src={player.team.logo_url}
@@ -187,12 +184,16 @@ export function DashboardView() {
                         <span className="font-black text-white text-lg uppercase italic leading-none group-hover:text-[#ff4655] transition-colors">
                           {player.name}
                         </span>
-                        <div className="flex items-center gap-2">
+
+                        {/* Contenedor del Equipo y el Rol */}
+                        <div className="flex items-center gap-2 mt-1">
                           <span className="text-xs text-zinc-400 uppercase font-bold tracking-wide">
                             {player.team?.name || "Free Agent"}
                           </span>
-                          <span className="text-[10px] bg-zinc-800 text-zinc-400 px-1.5 rounded border border-zinc-700 font-mono">
-                            {player.role || "FLEX"}
+
+                          {/* Badge del Rol (Sentinel, Duelist, etc.) */}
+                          <span className="text-[10px] bg-zinc-800/80 text-zinc-300 px-2 py-0.5 rounded border border-zinc-700 font-bold uppercase tracking-wider">
+                            {player.role || "Flex"}
                           </span>
                         </div>
                       </div>
@@ -218,7 +219,7 @@ export function DashboardView() {
             </div>
           </div>
 
-          <div className="bg-zinc-900/40 border border-zinc-800/50 rounded-2xl p-8 flex flex-col gap-6 hover:bg-zinc-900/60 transition-colors">
+          <div className="bg-zinc-900/40 border border-zinc-800/50 rounded-2xl p-8 flex flex-col gap-6 transition-colors">
             <div className="flex items-center gap-3 text-zinc-400">
               <div className="p-2 bg-zinc-800/50 rounded-lg">
                 <ShieldAlert className="size-6" />

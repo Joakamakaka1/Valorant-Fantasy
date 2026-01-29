@@ -105,7 +105,7 @@ export function LeagueView({ leagueId }: LeagueViewProps) {
         />
 
         <Tabs defaultValue="roster" className="w-full">
-          <TabsList className="bg-zinc-950 border border-zinc-800 w-full justify-start p-1 h-12 rounded-xl mb-4">
+          <TabsList className="bg-zinc-900/40 border border-zinc-800 w-full justify-start p-1 h-12 rounded-xl mb-4">
             <TabsTrigger
               value="roster"
               disabled={!myMemberInfo}
@@ -148,7 +148,11 @@ export function LeagueView({ leagueId }: LeagueViewProps) {
             value="ranking"
             className="mt-6 animate-in fade-in slide-in-from-bottom-4 duration-500"
           >
-            <LeagueRankings members={rankings} currentUserId={user?.id} />
+            <LeagueRankings
+              members={rankings}
+              currentUserId={user?.id}
+              proTeams={proTeams}
+            />
           </TabsContent>
         </Tabs>
       </div>

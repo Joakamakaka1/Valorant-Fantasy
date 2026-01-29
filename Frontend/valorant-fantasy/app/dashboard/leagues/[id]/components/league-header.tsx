@@ -54,7 +54,7 @@ export function LeagueHeader({
   };
 
   return (
-    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-zinc-800 pb-8">
+    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-8">
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-3">
           <div className="bg-[#ff4655] p-2 rounded-lg shadow-[0_0_20px_rgba(255,70,85,0.3)]">
@@ -85,23 +85,8 @@ export function LeagueHeader({
       </div>
 
       <div className="relative">
-        <div className="flex flex-col sm:flex-row items-center gap-4 bg-zinc-900 border border-zinc-800 p-4 rounded-xl backdrop-blur-xl shadow-2xl">
+        <div className="flex flex-col sm:flex-row items-center gap-4 bg-zinc-900/40 border border-zinc-800/50 p-4 rounded-xl backdrop-blur-xl shadow-2xl">
           <div className="flex items-center gap-4 flex-1 w-full">
-            <div className="size-16 rounded-xl bg-zinc-950 flex items-center justify-center border-2 border-zinc-800 shadow-2xl overflow-hidden relative group/logo">
-              <div className="absolute inset-0 bg-gradient-to-br from-[#ff4655]/10 to-transparent opacity-0 group-hover/logo:opacity-100 transition-opacity"></div>
-              {myMemberInfo?.selected_team_id ? (
-                <img
-                  src={
-                    proTeams.find((t) => t.id === myMemberInfo.selected_team_id)
-                      ?.logo_url || ""
-                  }
-                  alt="Team Logo"
-                  className="size-12 object-contain relative z-10 transition-transform group-hover/logo:scale-110 "
-                />
-              ) : (
-                <Shield className="size-8 text-zinc-800 relative z-10" />
-              )}
-            </div>
             <div className="flex flex-col flex-1">
               <span className="text-[10px] uppercase text-zinc-500 font-black tracking-[0.2em] mb-1">
                 Representing Organization
@@ -141,7 +126,7 @@ export function LeagueHeader({
                           {t.logo_url ? (
                             <img
                               src={t.logo_url}
-                              className="size-5 object-contain"
+                              className="size-6 object-contain"
                               alt=""
                             />
                           ) : (

@@ -55,7 +55,7 @@ export function PlayerDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-zinc-950 border-zinc-800 text-white sm:max-w-xl p-0 overflow-hidden shadow-[0_0_50px_rgba(255,70,85,0.15)]">
+      <DialogContent className="bg-zinc-950 border-zinc-800 text-white sm:max-w-xl p-0 overflow-hidden">
         <div className="bg-gradient-to-r from-[#ff4655] to-red-900 p-8">
           <DialogHeader>
             <div className="flex items-center justify-between">

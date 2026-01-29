@@ -13,13 +13,23 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Plus,
   Trash2,
   Search,
   User as UserIcon,
   AlertTriangle,
+  ArrowUpDown,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { LeagueMember, RosterEntry, Player } from "@/lib/types";
 import { toast } from "sonner";
@@ -60,6 +70,17 @@ export function RosterView({ member, roster, allPlayers }: RosterViewProps) {
 
   // State for Scout Dialog
   const [openDialogSlot, setOpenDialogSlot] = useState<string | null>(null);
+  const [scoutSort, setScoutSort] = useState<{
+    key: "points" | "current_price";
+    direction: "asc" | "desc";
+  }>({ key: "current_price", direction: "desc" });
+
+  const toggleScoutSort = (key: "points" | "current_price") => {
+    setScoutSort((prev) => ({
+      key,
+      direction: prev.key === key && prev.direction === "desc" ? "asc" : "desc",
+    }));
+  };
 
   // State for Release Confirmation Dialog
   const [playerToRelease, setPlayerToRelease] = useState<{
@@ -256,10 +277,10 @@ export function RosterView({ member, roster, allPlayers }: RosterViewProps) {
                     <div className="flex-1 flex items-center justify-center p-4 cursor-pointer">
                       <button className="aspect-square w-full max-w-[120px] flex flex-col items-center justify-center gap-2 hover:bg-[#ff4655]/5 transition-all text-zinc-700 hover:text-[#ff4655] group/btn border-2 border-dashed border-zinc-800/50 rounded-xl">
                         <Plus className="size-8 group-hover/btn:scale-110 transition-transform" />
-                        <span className="text-[10px] uppercase font-black tracking-widest text-center px-1">
+                        <span className="text-[10px] uppercase font-black text-zinc-500 tracking-widest text-center px-1">
                           {slot.label}
                         </span>
-                        <span className="text-[8px] text-zinc-800 font-black uppercase text-center px-2">
+                        <span className="text-[8px] text-zinc-700 font-black uppercase text-center px-2">
                           Click to Scout
                         </span>
                       </button>
@@ -286,6 +307,47 @@ export function RosterView({ member, roster, allPlayers }: RosterViewProps) {
                       </div>
                       <div className="max-h-[350px] overflow-y-auto pr-1 custom-scrollbar">
                         <Table>
+                          <TableHeader className="sticky top-0 bg-zinc-950 z-10 border-b border-zinc-800">
+                            <TableRow className="hover:bg-transparent border-zinc-800">
+                              <TableHead className="text-[10px] uppercase text-zinc-500 font-black h-8">
+                                Player
+                              </TableHead>
+                              <TableHead
+                                className="text-[10px] uppercase text-zinc-500 font-black h-8 cursor-pointer hover:text-white transition-colors text-right"
+                                onClick={() => toggleScoutSort("points")}
+                              >
+                                <div className="flex items-center justify-end">
+                                  Points
+                                  {scoutSort.key === "points" ? (
+                                    scoutSort.direction === "asc" ? (
+                                      <ChevronUp className="size-3 ml-1 text-[#ff4655]" />
+                                    ) : (
+                                      <ChevronDown className="size-3 ml-1 text-[#ff4655]" />
+                                    )
+                                  ) : (
+                                    <ArrowUpDown className="size-3 ml-1 opacity-30" />
+                                  )}
+                                </div>
+                              </TableHead>
+                              <TableHead
+                                className="text-[10px] uppercase text-zinc-500 font-black h-8 cursor-pointer hover:text-white transition-colors text-right"
+                                onClick={() => toggleScoutSort("current_price")}
+                              >
+                                <div className="flex items-center justify-end">
+                                  Price
+                                  {scoutSort.key === "current_price" ? (
+                                    scoutSort.direction === "asc" ? (
+                                      <ChevronUp className="size-3 ml-1 text-[#ff4655]" />
+                                    ) : (
+                                      <ChevronDown className="size-3 ml-1 text-[#ff4655]" />
+                                    )
+                                  ) : (
+                                    <ArrowUpDown className="size-3 ml-1 opacity-30" />
+                                  )}
+                                </div>
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
                           <TableBody>
                             {allPlayers
                               .filter((p) => p.role === slot.role)
@@ -298,14 +360,20 @@ export function RosterView({ member, roster, allPlayers }: RosterViewProps) {
                                 (p) =>
                                   !roster.some((r) => r.player_id === p.id),
                               )
-                              .sort((a, b) => b.current_price - a.current_price)
+                              .sort((a, b) => {
+                                const aValue = a[scoutSort.key];
+                                const bValue = b[scoutSort.key];
+                                return scoutSort.direction === "asc"
+                                  ? aValue - bValue
+                                  : bValue - aValue;
+                              })
                               .map((player) => (
                                 <TableRow
                                   key={player.id}
                                   className="border-zinc-800 hover:bg-zinc-900 group/row"
                                 >
                                   <TableCell className="py-3">
-                                    <div className="flex flex-col">
+                                    <div className="flex flex-col gap-1">
                                       <span className="font-black text-sm uppercase italic">
                                         {player.name}
                                       </span>
@@ -315,13 +383,18 @@ export function RosterView({ member, roster, allPlayers }: RosterViewProps) {
                                     </div>
                                   </TableCell>
                                   <TableCell className="text-right py-3">
+                                    <span className="text-[12px] text-emerald-500 font-black uppercase">
+                                      {player.points.toFixed(1)}
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="text-right py-3">
                                     <Button
                                       size="sm"
                                       disabled={
                                         isProcessing ||
                                         member.budget < player.current_price
                                       }
-                                      className="bg-zinc-800 hover:bg-[#ff4655] h-8 text-[11px] uppercase font-black italic transition-all group-hover/row:scale-105 disabled:opacity-50"
+                                      className="bg-zinc-700 hover:bg-emerald-500 h-8 text-[11px] uppercase font-black italic transition-all group-hover/row:scale-105 disabled:bg-[#ff4655]"
                                       onClick={() =>
                                         handleBuyPlayer(slot, player)
                                       }

@@ -1,30 +1,18 @@
 "use client";
 
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
-import { LeagueMember } from "@/lib/types";
+import { LeagueMember, Team } from "@/lib/types";
+import { Users } from "lucide-react";
 
 interface LeagueRankingsProps {
   members: LeagueMember[];
   currentUserId?: number | undefined;
+  proTeams: Team[];
 }
 
 export function LeagueRankings({
   members,
   currentUserId,
+  proTeams,
 }: LeagueRankingsProps) {
   // Sort members by total points descending
   const sortedMembers = [...members].sort(
@@ -32,79 +20,96 @@ export function LeagueRankings({
   );
 
   return (
-    <Card className="bg-zinc-900/50 border-zinc-800 backdrop-blur-sm">
-      <CardHeader>
-        <CardTitle className="uppercase italic font-black">
-          League Leaderboard
-        </CardTitle>
-        <CardDescription className="font-bold">
-          Track the performance and budget of all participants.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow className="border-zinc-800 hover:bg-transparent">
-              <TableHead className="w-16 uppercase font-black text-xs">
-                Pos
-              </TableHead>
-              <TableHead className="uppercase font-black text-xs text-zinc-500">
-                Player Identity
-              </TableHead>
-              <TableHead className="text-right uppercase font-black text-xs">
-                Total Points
-              </TableHead>
-              <TableHead className="text-right uppercase font-black text-xs">
-                Team Value
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sortedMembers.map((member, index) => {
-              const isCurrentUser = member.user_id === currentUserId;
-              return (
-                <TableRow
-                  key={member.id}
-                  className={`border-zinc-800 group/rank ${
-                    isCurrentUser ? "bg-white/5" : ""
-                  }`}
-                >
-                  <TableCell className="font-black text-2xl italic text-zinc-700 group-hover/rank:text-[#ff4655] transition-colors">
-                    {(index + 1).toString().padStart(2, "0")}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span className="font-black text-white uppercase italic text-lg leading-tight pb-2">
-                        {member.team_name}
+    <div className="space-y-4">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-2xl font-black text-white uppercase italic tracking-tighter">
+            League <span className="text-[#ff4655]">Leaderboard</span>
+          </h3>
+          <p className="text-zinc-500 text-sm font-bold uppercase tracking-wider">
+            Track performance and team values.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-3">
+        {sortedMembers.map((member, index) => {
+          const isCurrentUser = member.user_id === currentUserId;
+          const proTeam = proTeams.find(
+            (t: Team) => t.id === member.selected_team_id,
+          );
+
+          return (
+            <div
+              key={member.id}
+              className={`flex items-center justify-between p-4 rounded-xl border transition-all hover:shadow-lg group ${
+                isCurrentUser
+                  ? "bg-zinc-950/20 border-zinc-800/50 hover:border-[#ff4655]/50"
+                  : "bg-zinc-950/20 border-zinc-800/50 hover:border-[#ff4655]/50"
+              }`}
+            >
+              <div className="flex items-center gap-4">
+                {/* Visual Identity (Logo + Rank) */}
+                <div className="size-14 rounded-xl bg-zinc-950 border border-zinc-800 overflow-hidden relative flex items-center justify-center shadow-inner transition-colors">
+                  {proTeam?.logo_url ? (
+                    <img
+                      src={proTeam.logo_url}
+                      alt={proTeam.name}
+                      className="size-10 object-contain opacity-80 group-hover:opacity-100 transition-opacity"
+                    />
+                  ) : (
+                    <Users className="size-6 text-zinc-700" />
+                  )}
+                  <div className="absolute top-0 left-0 bg-[#ff4655] text-white text-[10px] font-black px-1.5 py-0.5 rounded-br shadow-sm">
+                    #{index + 1}
+                  </div>
+                </div>
+
+                {/* Identity Info */}
+                <div className="flex flex-col gap-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-black text-white text-xl uppercase italic leading-none transition-colors">
+                      {member.team_name}
+                    </span>
+                    {member.is_admin && (
+                      <span className="text-[10px] text-zinc-500 font-bold border border-zinc-800 px-1.5 rounded uppercase tracking-tighter">
+                        Admin
                       </span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-[#ff4655] font-black uppercase tracking-wider bg-[#ff4655]/10 px-2 py-0.5 rounded">
-                          @{member.user?.username || "SYNCING..."}
-                        </span>
-                        {member.is_admin && (
-                          <span className="text-[10px] text-zinc-500 font-bold border border-zinc-800 px-1 rounded">
-                            ADMIN
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right text-emerald-400 font-black text-2xl italic tracking-tighter">
-                    {member.total_points.toFixed(1)}
-                  </TableCell>
-                  <TableCell className="text-right text-zinc-100 font-black italic text-lg">
-                    €
-                    {member.team_value
-                      ? (member.team_value / 1000000).toFixed(1)
-                      : "0.0"}
-                    M
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs text-[#ff4655] font-black uppercase tracking-wider bg-[#ff4655]/10 px-2 py-0.5 rounded">
+                      @{member.user?.username || "SYNCING..."}
+                    </span>
+                    {isCurrentUser && (
+                      <span className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest">
+                        (MEMBER PREVIEW)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Stats Section */}
+              <div className="flex flex-col items-end gap-1">
+                <span className="text-emerald-400 text-2xl font-black italic tracking-tighter">
+                  {member.total_points.toFixed(1)}{" "}
+                  <span className="text-xs text-emerald-500/50 not-italic uppercase font-bold tracking-widest ml-1">
+                    pts
+                  </span>
+                </span>
+                <span className="text-sm text-zinc-500 font-black italic uppercase">
+                  €
+                  {member.team_value
+                    ? (member.team_value / 1000000).toFixed(1)
+                    : "0.0"}
+                  M Value
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }

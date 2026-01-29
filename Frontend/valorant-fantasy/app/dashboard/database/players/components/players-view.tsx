@@ -44,13 +44,14 @@ export function PlayersView() {
       role: p.role,
       points: p.points,
       price: `€${p.current_price.toFixed(1)}M`,
+      rawPrice: p.current_price,
     }));
 
   return (
     <SidebarInset className="bg-[#0f1923]">
       <SiteHeader />
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 overflow-y-auto bg-[#0f1923]">
-        <div className="w-full flex flex-col gap-2 border-b border-zinc-800/50 pb-8">
+        <div className="w-full flex flex-col gap-2">
           <h1 className="text-5xl font-black text-white uppercase tracking-tighter italic">
             Operator <span className="text-[#ff4655]">Database</span>
           </h1>

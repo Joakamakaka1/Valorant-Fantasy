@@ -20,11 +20,11 @@ interface MatchCardProps {
 
 export function MatchCard({ match }: MatchCardProps) {
   return (
-    <Card className="border-zinc-800 bg-zinc-900/50">
+    <Card className="border-zinc-800/50 bg-zinc-900/40">
       <CardHeader className="pb-2">
         <div className="relative flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xs text-zinc-500">
-            <Calendar className="size-3" />
+          <div className="flex items-center gap-2 text-sm text-zinc-500">
+            <Calendar className="size-5" />
             {match.date ? new Date(match.date).toLocaleDateString() : "TBD"}
           </div>
 
@@ -51,7 +51,7 @@ export function MatchCard({ match }: MatchCardProps) {
               className="text-zinc-600 hover:text-[#ff4655] transition-colors"
               title="View on VLR.gg"
             >
-              <ExternalLink className="size-3" />
+              <ExternalLink className="size-5" />
             </a>
           )}
         </div>
@@ -59,7 +59,7 @@ export function MatchCard({ match }: MatchCardProps) {
       <CardContent>
         <div className="flex items-center justify-between gap-8 mb-6">
           <div className="flex flex-1 items-center justify-end gap-3">
-            <span className="font-bold text-white text-right">
+            <span className="font-bold text-lg text-white text-right">
               {match.team_a?.name || "TBD"}
             </span>
             {match.team_a?.logo_url && (
@@ -93,7 +93,7 @@ export function MatchCard({ match }: MatchCardProps) {
                 className="size-10 object-contain"
               />
             )}
-            <span className="font-bold text-white text-left">
+            <span className="font-bold text-lg text-white text-left">
               {match.team_b?.name || "TBD"}
             </span>
           </div>
@@ -167,7 +167,7 @@ export function MatchCard({ match }: MatchCardProps) {
                         .map((playerStat: AggregatedPlayerStat) => (
                           <div
                             key={playerStat.player?.id}
-                            className="flex items-center justify-between p-2 rounded-lg bg-zinc-950/50 hover:bg-zinc-900/70 transition-all border border-zinc-800/30"
+                            className="flex items-center justify-between p-2 rounded-xl bg-zinc-950/20 border border-zinc-800/50 transition-all hover:border-[#ff4655]/50 hover:shadow-lg group"
                           >
                             <div className="flex items-center gap-3 flex-1 min-w-0">
                               <span className="text-[10px] font-bold text-zinc-500 w-20 uppercase shrink-0">
@@ -180,7 +180,7 @@ export function MatchCard({ match }: MatchCardProps) {
                               </span>
                             </div>
                             <div className="flex flex-col items-end gap-0.5 shrink-0">
-                              <span className="text-sm font-black text-[#ff4655]">
+                              <span className="text-sm font-black text-emerald-500">
                                 {playerStat.fantasy_points.toFixed(1)} pts
                               </span>
                               <span className="text-[9px] text-zinc-600">
@@ -246,7 +246,7 @@ export function MatchCard({ match }: MatchCardProps) {
                         .map((playerStat: AggregatedPlayerStat) => (
                           <div
                             key={playerStat.player?.id}
-                            className="flex items-center justify-between p-2 rounded-lg bg-zinc-950/50 hover:bg-zinc-900/70 transition-all border border-zinc-800/30"
+                            className="flex items-center justify-between p-2 rounded-xl bg-zinc-950/20 border border-zinc-800/50 transition-all hover:border-[#ff4655]/50 hover:shadow-lg group"
                           >
                             <div className="flex items-center gap-3 flex-1 min-w-0">
                               <span className="text-[10px] font-bold text-zinc-500 w-20 uppercase shrink-0">
@@ -259,7 +259,7 @@ export function MatchCard({ match }: MatchCardProps) {
                               </span>
                             </div>
                             <div className="flex flex-col items-end gap-0.5 shrink-0">
-                              <span className="text-sm font-black text-[#ff4655]">
+                              <span className="text-sm font-black text-emerald-500">
                                 {playerStat.fantasy_points.toFixed(1)} pts
                               </span>
                               <span className="text-[9px] text-zinc-600">

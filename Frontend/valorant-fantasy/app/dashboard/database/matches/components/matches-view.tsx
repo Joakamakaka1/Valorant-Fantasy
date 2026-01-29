@@ -59,7 +59,7 @@ export function MatchesView() {
           onValueChange={setStatusFilter}
           className="w-full"
         >
-          <TabsList className="bg-zinc-950 border border-zinc-800 w-full justify-start p-1 h-12 rounded-xl">
+          <TabsList className="bg-zinc-900/40 border border-zinc-800 w-full justify-start p-1 h-12 rounded-xl">
             <TabsTrigger
               value="all"
               className="data-[state=active]:bg-zinc-800 data-[state=active]:text-white px-8 font-black uppercase italic tracking-tighter rounded-lg transition-all"
