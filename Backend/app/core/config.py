@@ -88,7 +88,7 @@ class Settings:
             return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
-    VALORANT_API_BASE_URL: str = os.getenv("VALORANT_API_BASE_URL", "https://valorant-api.com/v1")
+    VALORANT_API_BASE_URL: str = os.getenv("VALORANT_API_BASE_URL", "https://valorant-api.com/v1") # Unused
     
     # @property
     # def vct_event_ids(self) -> list[str]:

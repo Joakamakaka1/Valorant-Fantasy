@@ -124,18 +124,8 @@ class VLRScraper:
             return response.text
 
     async def scrape_match_details(self, match_page_url: str) -> Optional[Dict[str, Any]]:
-        """
-        Scraps match details from VLR.gg con reintentos automáticos.
-        
-        Args:
-            match_page_url: Path relativo del partido (e.g., '/12345/heretics-vs-fnatic')
-            
-        Returns:
-            Diccionario con datos del partido o None si falla
-        """
         full_url = f"{self.vlr_base_url}{match_page_url}"
         try:
-            # Usar método con reintentos
             html_content = await self._fetch_with_retry(full_url)
             soup = BeautifulSoup(html_content, 'html.parser')
             
@@ -145,7 +135,6 @@ class VLRScraper:
             for h in header_links:
                 name_elem = h.select_one(".match-header-link-name")
                 if not name_elem: continue
-                
                 name = name_elem.text.strip()
                 logo = h.select_one("img")["src"] if h.select_one("img") else None
                 url = h.get("href")
@@ -153,19 +142,53 @@ class VLRScraper:
                     logo = "https:" + logo
                 teams.append({"name": name, "logo_url": logo, "url": url})
 
+            # ---------------------------------------------------------
             # 2. Get Player Stats
+            # ---------------------------------------------------------
+            
+            # Intento 1: Buscar el contenedor estándar 'all'
             all_maps_container = soup.select_one(".vm-stats-game[data-game-id='all']")
+            
+            # Intento 2: Si falla, buscar la pestaña que diga "All Maps" para obtener el ID correcto
+            if not all_maps_container:
+                nav_items = soup.select(".vm-stats-gamesnav-item")
+                for item in nav_items:
+                    # Buscamos texto "All Maps" o "Overall"
+                    if "all" in item.text.lower() or "overall" in item.text.lower():
+                        target_id = item.get("data-game-id")
+                        if target_id:
+                            all_maps_container = soup.select_one(f".vm-stats-game[data-game-id='{target_id}']")
+                            break
+            
+            # Intento 3: Si sigue sin haber contenedor (ej. BO1), usamos el PRIMER contenedor de juego encontrado
+            # pero NO 'soup' entero, para evitar mezclar tablas.
+            if not all_maps_container:
+                all_maps_container = soup.select_one(".vm-stats-game")
+
+            # Si tras todo esto sigue siendo None, fallback a soup con precaución (caso muy raro)
             if not all_maps_container:
                 all_maps_container = soup
-            
+
             stats_tables = all_maps_container.select("table.wf-table-inset")
             if not stats_tables:
                 stats_tables = all_maps_container.select(".wf-table-stats")
             
             players_stats = []
+            # Usamos un set para evitar duplicados si por error leemos tablas parciales
+            processed_players = set()
+
             for team_idx, table in enumerate(stats_tables):
-                if team_idx > 1: break # Only first 2 tables
+                # IMPORTANTE: Si estamos en el modo "soup" (fallback total), solo queremos las 2 primeras.
+                # Si hemos encontrado el contenedor correcto ('all'), procesamos lo que haya dentro (normalmente 2 tablas).
+                if team_idx > 1 and all_maps_container == soup: 
+                    break 
                 
+                # Validación extra: Asegurar que es una tabla de stats (tiene K/D/A)
+                # Esto evita leer tablas de historial o economia
+                headers_text = table.text.upper()
+                if "K" not in headers_text or "D" not in headers_text or "A" not in headers_text:
+                    continue
+
                 headers_cells = table.select("thead th")
                 col_map = {}
                 for i, th in enumerate(headers_cells):
@@ -188,6 +211,11 @@ class VLRScraper:
                     
                     player_name = name_elem.text.strip().split("\n")[0].strip()
                     if not player_name or len(player_name) < 2: continue
+                    
+                    # Evitar duplicados (si por error leemos la misma tabla dos veces)
+                    if player_name in processed_players:
+                        continue
+                    processed_players.add(player_name)
                     
                     agent_img = row.select_one(".mod-agents img")
                     agent = "Unknown"
@@ -215,7 +243,7 @@ class VLRScraper:
                     players_stats.append({
                         "name": player_name,
                         "agent": agent,
-                        "team_index": team_idx,
+                        "team_index": team_idx % 2, # Asegurar que sea 0 o 1 incluso si hay multiples tablas
                         "rating": rating,
                         "acs": get_val("acs"),
                         "kills": get_val("kills", True),
@@ -227,7 +255,7 @@ class VLRScraper:
                         "first_deaths": get_val("first_deaths", True)
                     })
 
-            # Upcoming Fallback
+            # Upcoming Fallback 
             if not players_stats:
                 match_players = soup.select(".match-header-vs .match-header-vs-players")
                 for i, container in enumerate(match_players):
@@ -252,13 +280,20 @@ class VLRScraper:
                     match_date = datetime.strptime(date_info.get("data-utc-ts"), "%Y-%m-%d %H:%M:%S")
                 except: pass
 
-            score_elems = soup.select(".match-header-vs-score span")
+            # Mejor detección de scores usando clases específicas en lugar de índices
             scores = [0, 0]
-            if len(score_elems) >= 3:
-                try:
-                    scores[0] = int(score_elems[0].text.strip())
-                    scores[1] = int(score_elems[2].text.strip())
-                except: pass
+            score_container = soup.select_one(".match-header-vs-score")
+            if score_container:
+                # Intentar buscar por las clases específicas de left/right
+                score_a_elem = score_container.select_one(".match-header-vs-score-winner") or \
+                               score_container.select_one(".js-spoiler span:first-child")
+                               
+                # Si es complicado por selectores, cogemos todos los números del header
+                all_nums = re.findall(r'\d+', score_container.text)
+                if len(all_nums) >= 2:
+                    # Normalmente son los dos números más grandes o los únicos
+                    scores[0] = int(all_nums[0])
+                    scores[1] = int(all_nums[-1]) # A veces hay un ':' en medio
 
             return {
                 "teams": teams,

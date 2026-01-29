@@ -119,8 +119,20 @@ class SyncService:
     @transactional
     async def _sync_match_details(self, vlr_id: str, event: Dict[str, Any], details: Dict[str, Any], existing_match: Optional[Match]):
         """Procesa los detalles de un partido dentro de una transacción garantizando consistencia."""
+        
+        # Detectar si hay estadísticas reales (kills > 0)
         has_stats = any(p["kills"] > 0 or p["rating"] > 0 for p in details["players"])
-        status = "completed" if has_stats else "upcoming"
+        
+        # Si no hay stats, es upcoming. Si es upcoming, los scores SON 0-0 obligatoriamente.
+        # Esto evita que se guarde la fecha (ej: dia 15) como goles (15-0).
+        if has_stats:
+            status = "completed"
+            final_score_a = details.get("scores", [0, 0])[0]
+            final_score_b = details.get("scores", [0, 0])[1]
+        else:
+            status = "upcoming"
+            final_score_a = 0
+            final_score_b = 0
 
         # 2. Procesar Equipos: asegurar que existen en la DB
         team_models = []
@@ -134,38 +146,51 @@ class SyncService:
                 await self.team_service.update(team.id, {"logo_url": t_info["logo_url"]})
             team_models.append(team)
 
-        if len(team_models) < 2: return
+        # Si no hay 2 equipos (ej: TBD vs TBD mal scrapeado), salimos para no romper nada
+        if len(team_models) < 2: 
+            return
 
         # 3. Procesar Partido: Crear o Actualizar
+        match_data = {
+            "status": status,
+            "date": details.get("date"),
+            "score_team_a": final_score_a,
+            "score_team_b": final_score_b,
+            "format": self.deduce_format(final_score_a, final_score_b)
+        }
+
         if not existing_match:
-            existing_match = await self.match_service.create(
-                vlr_match_id=vlr_id, status=status,
-                tournament_name=event["name"],
-                vlr_url=f"{self.scraper.vlr_base_url}{details.get('url', '')}",
-                team_a_id=team_models[0].id, team_b_id=team_models[1].id,
-                date=details.get("date"),
-                score_team_a=details.get("scores", [0, 0])[0],
-                score_team_b=details.get("scores", [0, 0])[1],
-                format=self.deduce_format(details.get("scores", [0, 0])[0], details.get("scores", [0, 0])[1])
-            )
+            # Crear nuevo
+            match_params = {
+                "vlr_match_id": vlr_id,
+                "tournament_name": event["name"],
+                "vlr_url": f"{self.scraper.vlr_base_url}{details.get('url', '')}",
+                "team_a_id": team_models[0].id,
+                "team_b_id": team_models[1].id,
+                **match_data
+            }
+            # Usamos date del existing o del details si es nuevo
+            if not match_params["date"]: 
+                match_params["date"] = datetime.utcnow() # Fallback por seguridad
+            
+            existing_match = await self.match_service.create(**match_params)
         else:
-            await self.match_service.update(existing_match.id, {
-                "status": status,
-                "date": details.get("date") or existing_match.date,
-                "score_team_a": details.get("scores", [0, 0])[0],
-                "score_team_b": details.get("scores", [0, 0])[1],
-                "format": self.deduce_format(details.get("scores", [0, 0])[0], details.get("scores", [0, 0])[1])
-            })
+            # Actualizar existente
+            # Mantenemos la fecha antigua si la nueva viene vacía
+            if not match_data["date"]:
+                match_data.pop("date")
+            
+            await self.match_service.update(existing_match.id, match_data)
 
         # 4. Procesar Jugadores y Estadísticas
         stats_created = 0
-        stats_skipped = 0
+        stats_updated = 0
         
         for p_stats in details["players"]:
             try:
                 current_team = team_models[0] if p_stats["team_index"] == 0 else team_models[1]
                 
-                # Buscar o crear jugador, asignando el equipo correcto
+                # Buscar o crear jugador
                 player = await self.player_service.repo.get_by_name(p_stats["name"])
                 if not player:
                     try:
@@ -175,43 +200,73 @@ class SyncService:
                             base_price=10.0, current_price=10.0
                         )
                     except AlreadyExistsException:
+                        # Concurrencia: si se creó justo en otro hilo
                         player = await self.player_service.repo.get_by_name(p_stats["name"])
-                        if not player: continue
-                elif not player.team_id:
+                
+                if not player: continue # Skip si falló todo
+
+                # Actualizar equipo del jugador si ha cambiado (importante para TBD -> Equipo Real)
+                if player.team_id != current_team.id:
                     await self.player_service.update(player.id, {"team_id": current_team.id})
 
-                # Crear estadísticas si el partido terminó
+                # Solo procesamos stats si el partido está completado
                 if status == "completed":
-                    try:
-                        await self.stats_service.create(
-                            match_id=existing_match.id, player_id=player.id,
-                            agent=p_stats["agent"], kills=p_stats["kills"],
-                            death=p_stats["deaths"], assists=p_stats["assists"],
-                            acs=p_stats["acs"], adr=p_stats["adr"],
-                            hs_percent=p_stats["hs_percent"], rating=p_stats["rating"],
-                            first_kills=p_stats["first_kills"], first_deaths=p_stats["first_deaths"],
-                            clutches_won=0 
+                    # Datos limpios de la estadística
+                    stat_data = {
+                        "agent": p_stats["agent"],
+                        "kills": p_stats["kills"],
+                        "death": p_stats["deaths"], # Ojo: en tu modelo es 'death' o 'deaths'? Asumo 'death' por tu código original
+                        "assists": p_stats["assists"],
+                        "acs": p_stats["acs"],
+                        "adr": p_stats["adr"],
+                        "hs_percent": p_stats["hs_percent"],
+                        "rating": p_stats["rating"],
+                        "first_kills": p_stats["first_kills"],
+                        "first_deaths": p_stats["first_deaths"],
+                        "clutches_won": 0
+                    }
+
+                    # Buscamos manualmente si ya existe la stat para evitar el Error 1062 y el MissingGreenlet
+                    # Usamos una query directa para ser más eficientes dentro del loop
+                    q_exist = select(PlayerMatchStats).where(
+                        PlayerMatchStats.match_id == existing_match.id,
+                        PlayerMatchStats.player_id == player.id
+                    )
+                    res_exist = await self.db.execute(q_exist)
+                    existing_stat = res_exist.scalar_one_or_none()
+
+                    if existing_stat:
+                        # UPDATE: Actualizamos los valores existentes
+                        for k, v in stat_data.items():
+                            setattr(existing_stat, k, v)
+                        stats_updated += 1
+                    else:
+                        # INSERT: Creamos nueva
+                        new_stat = PlayerMatchStats(
+                            match_id=existing_match.id,
+                            player_id=player.id,
+                            **stat_data
                         )
+                        self.db.add(new_stat)
                         stats_created += 1
-                    except AlreadyExistsException:
-                        stats_skipped += 1
-                        continue
+
             except Exception as e:
                 logger.error(f"Error procesando jugador {p_stats.get('name')}: {e}")
                 continue
 
         if status == "completed":
-            logger.info(f"Match {existing_match.vlr_match_id}: Stats creadas={stats_created}, Skipped={stats_skipped}")
+            logger.info(f"Match {existing_match.vlr_match_id}: Stats Created={stats_created}, Updated={stats_updated}")
             await self.match_service.mark_as_processed(existing_match.id)
             
-            # Recargar con relaciones para actualización global de stats/puntos
+            # Recargar con relaciones para actualización global
+            # Usamos populate_existing() para asegurar que traemos datos frescos de la misma sesión
             q = select(Match).where(Match.id == existing_match.id).options(
                 selectinload(Match.player_stats).selectinload(PlayerMatchStats.player)
             )
             res = await self.db.execute(q)
             match_with_stats = res.scalar_one()
             
-            # Actualizar puntos y precios de los jugadores involucrados
+            # Actualizar puntos y precios
             await self.update_player_global_stats(match_with_stats)
 
     async def sync_kickoff_2026(self):
