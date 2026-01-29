@@ -15,7 +15,7 @@ class MatchRepository(BaseRepository[Match]):
         super().__init__(Match, db)
 
     async def get_all(self, skip: int = 0, limit: int = 100, options: Optional[List] = None) -> List[Match]:
-        query = select(Match).offset(skip).limit(limit)
+        query = select(Match).order_by(Match.date.desc(), Match.id.desc()).offset(skip).limit(limit)
         if options:
             query = query.options(*options)
         result = await self.db.execute(query)
@@ -34,7 +34,7 @@ class MatchRepository(BaseRepository[Match]):
         return result.scalars().first()
 
     async def get_by_status(self, status: str, options: Optional[List] = None) -> List[Match]:
-        query = select(Match).where(Match.status == status)
+        query = select(Match).where(Match.status == status).order_by(Match.date.desc())
         if options:
             query = query.options(*options)
         result = await self.db.execute(query)

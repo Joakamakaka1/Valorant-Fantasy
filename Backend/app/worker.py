@@ -31,7 +31,7 @@ async def run_sync():
         finally:
             await redis.close()
 
-async def main_loop(interval_hours: int = 6):
+async def main_loop(interval_hours: int = 4):
     """Main loop for the worker (6 hour interval to check live/upcoming matches)"""
     logger.info(f"Worker started. Sync interval: {interval_hours} hours.")
     

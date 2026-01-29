@@ -8,10 +8,14 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQuery } from "@tanstack/react-query";
 import { MatchCard } from "./match-card";
 import { MatchesSkeleton } from "./matches-skeleton";
+import { Button } from "@/components/ui/button";
 import { AlertCircle } from "lucide-react";
 
 export function MatchesView() {
   const [statusFilter, setStatusFilter] = useState("live");
+  const [currentRegion, setCurrentRegion] = useState("ALL");
+
+  const regions = ["ALL", "AMERICAS", "EMEA", "PACIFIC", "CN"];
 
   const {
     data: allMatches = [],
@@ -20,8 +24,8 @@ export function MatchesView() {
   } = useQuery({
     queryKey: ["matches"],
     queryFn: async () => {
-      const data = await matchesApi.getAll({});
-      // Sort: Newest first
+      const data = await matchesApi.getAll({ limit: 500 });
+      // Sort: Newest first (consistent with backend but reinforced here)
       return data.sort((a, b) => {
         const dateA = a.date ? new Date(a.date).getTime() : 0;
         const dateB = b.date ? new Date(b.date).getTime() : 0;
@@ -31,14 +35,65 @@ export function MatchesView() {
     staleTime: 1000 * 60 * 5, // 5 minutes cache
   });
 
-  // Filter client-side
-  const filteredMatches = allMatches.filter((match) => {
-    if (statusFilter === "all") return true;
-    if (statusFilter === "upcoming") return match.status === "upcoming";
-    if (statusFilter === "live") return match.status === "live";
-    if (statusFilter === "completed") return match.status === "completed";
-    return true;
-  });
+  // Filter and Sort matches
+  const filteredMatches = allMatches
+    .filter((match) => {
+      // 1. Status Filter
+      let statusMatch = true;
+      if (statusFilter !== "all") {
+        if (statusFilter === "upcoming")
+          statusMatch = match.status === "upcoming";
+        else if (statusFilter === "live") statusMatch = match.status === "live";
+        else if (statusFilter === "completed")
+          statusMatch = match.status === "completed";
+      }
+
+      if (!statusMatch) return false;
+
+      // 2. Region Filter Logic
+      const tournament = match.tournament_name?.toUpperCase() || "";
+      const teamAName = match.team_a?.name?.toUpperCase() || "";
+      const teamBName = match.team_b?.name?.toUpperCase() || "";
+
+      // Regions from teams (strictly excluding TBD)
+      const regionA =
+        teamAName && !teamAName.includes("TBD")
+          ? match.team_a?.region?.toUpperCase()
+          : null;
+      const regionB =
+        teamBName && !teamBName.includes("TBD")
+          ? match.team_b?.region?.toUpperCase()
+          : null;
+
+      // Hierarchical Detection
+      const detectedRegion = (() => {
+        if (tournament.includes("AMERICAS")) return "AMERICAS";
+        if (tournament.includes("EMEA")) return "EMEA";
+        if (tournament.includes("PACIFIC")) return "PACIFIC";
+        if (tournament.includes("CHINA") || tournament.includes("CN"))
+          return "CN";
+
+        // Fallback to team regions if tournament is generic
+        if (regionA === "AMERICAS" || regionB === "AMERICAS") return "AMERICAS";
+        if (regionA === "EMEA" || regionB === "EMEA") return "EMEA";
+        if (regionA === "PACIFIC" || regionB === "PACIFIC") return "PACIFIC";
+        if (regionA === "CN" || regionB === "CN") return "CN";
+
+        return null;
+      })();
+
+      if (currentRegion === "ALL") return true;
+      return detectedRegion === currentRegion;
+    })
+    .sort((a, b) => {
+      const dateA = a.date ? new Date(a.date).getTime() : 0;
+      const dateB = b.date ? new Date(b.date).getTime() : 0;
+
+      // 'all' and 'upcoming' sort oldest-to-newest (ascending)
+      // 'completed' and 'live' sort newest-to-oldest (descending)
+      const isAscending = statusFilter === "all" || statusFilter === "upcoming";
+      return isAscending ? dateA - dateB : dateB - dateA;
+    });
 
   return (
     <SidebarInset className="bg-[#0f1923]">
@@ -51,6 +106,25 @@ export function MatchesView() {
           <p className="text-zinc-400">
             Recent and upcoming matches across all VCT tournaments.
           </p>
+        </div>
+
+        {/* Region Filters */}
+        <div className="flex flex-wrap items-center gap-2">
+          {regions.map((region) => (
+            <Button
+              key={region}
+              variant={currentRegion === region ? "outline" : "ghost"}
+              size="sm"
+              className={`h-8 font-black uppercase tracking-tighter italic transition-all ${
+                currentRegion === region
+                  ? "border-[#ff4655] bg-[#ff4655]/10 text-white"
+                  : "text-zinc-500 hover:text-white"
+              }`}
+              onClick={() => setCurrentRegion(region)}
+            >
+              {region}
+            </Button>
+          ))}
         </div>
 
         <Tabs
