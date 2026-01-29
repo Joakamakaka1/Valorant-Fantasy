@@ -117,7 +117,7 @@ export function NavUser({
 
         {/* Account Details Dialog */}
         <Dialog open={openAccount} onOpenChange={setOpenAccount}>
-          <DialogContent className="bg-zinc-950 border-zinc-800 text-white sm:max-w-md p-0 overflow-hidden shadow-2xl">
+          <DialogContent className="bg-zinc-950 border-zinc-800 text-white w-[92vw] sm:w-[95vw] max-w-[600px] max-h-[90vh] p-0 overflow-hidden shadow-2xl rounded-2xl sm:rounded-lg">
             <div className="bg-gradient-to-r from-[#ff4655] to-red-900 p-8">
               <DialogHeader>
                 <DialogTitle className="uppercase italic font-black text-3xl text-white tracking-tighter">
