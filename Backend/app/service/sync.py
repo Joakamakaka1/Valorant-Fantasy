@@ -427,7 +427,7 @@ class SyncService:
     @transactional
     async def recalibrate_all_prices(self):
         """Recalibra PUNTOS y PRECIOS para todos los jugadores basado en todo el historial"""
-        q_all_stats = select(PlayerMatchStats)
+        q_all_stats = select(PlayerMatchStats).options(selectinload(PlayerMatchStats.match))
         res_all_stats = await self.db.execute(q_all_stats)
         all_stats = res_all_stats.scalars().all()
         
