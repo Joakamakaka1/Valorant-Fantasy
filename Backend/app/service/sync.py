@@ -206,7 +206,7 @@ class SyncService:
             # Log status changes
             old_status = existing_match.status
             if old_status != status:
-                logger.info(f"Match {vlr_id} status changed: {old_status} → {status}")
+                logger.info(f"Match {vlr_id} status changed: {old_status} -> {status}")
             
             await self.match_service.update(existing_match.id, match_data)
 
@@ -245,7 +245,7 @@ class SyncService:
                     stat_data = {
                         "agent": p_stats["agent"],
                         "kills": p_stats["kills"],
-                        "death": p_stats["deaths"], # Ojo: en tu modelo es 'death' o 'deaths'? Asumo 'death' por tu código original
+                        "death": p_stats["deaths"], # Verifica si tu modelo es 'death' o 'deaths'
                         "assists": p_stats["assists"],
                         "acs": p_stats["acs"],
                         "adr": p_stats["adr"],
@@ -256,8 +256,7 @@ class SyncService:
                         "clutches_won": 0
                     }
 
-                    # Buscamos manualmente si ya existe la stat para evitar el Error 1062 y el MissingGreenlet
-                    # Usamos una query directa para ser más eficientes dentro del loop
+                    # Buscamos manualmente si ya existe la stat
                     q_exist = select(PlayerMatchStats).where(
                         PlayerMatchStats.match_id == existing_match.id,
                         PlayerMatchStats.player_id == player.id
@@ -300,9 +299,7 @@ class SyncService:
         
         # Solo actualizar precios si el partido está realmente completado
         if status == "completed":
-            
             # Recargar con relaciones para actualización global
-            # Usamos populate_existing() para asegurar que traemos datos frescos de la misma sesión
             q = select(Match).where(Match.id == existing_match.id).options(
                 selectinload(Match.player_stats).selectinload(PlayerMatchStats.player)
             )
