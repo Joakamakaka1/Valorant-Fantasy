@@ -175,11 +175,29 @@ class VLRScraper:
                 name_elem = h.select_one(".match-header-link-name")
                 if not name_elem: continue
                 name = name_elem.text.strip()
+                
+                # Skip empty or invalid team names immediately
+                if not name or len(name) < 2:
+                    continue
+                    
                 logo = h.select_one("img")["src"] if h.select_one("img") else None
                 url = h.get("href")
                 if logo and logo.startswith("//"):
                     logo = "https:" + logo
                 teams.append({"name": name, "logo_url": logo, "url": url})
+            
+            # VALIDACIÓN CRÍTICA: Asegurar que tenemos exactamente 2 equipos
+            if len(teams) != 2:
+                logger.error(f"Team extraction failed for {match_page_url}: Found {len(teams)} teams, expected 2. Teams: {[t['name'] for t in teams]}")
+                return None
+            
+            # Validar que los nombres no estén completamente vacíos
+            # NOTA: Permitimos "TBD" para matches upcoming donde aún no se conocen los equipos
+            for team in teams:
+                if not team["name"] or len(team["name"]) < 2:
+                    logger.error(f"Empty/invalid team name in {match_page_url}: '{team['name']}'")
+                    return None
+
 
             # ---------------------------------------------------------
             # 2. Get Player Stats

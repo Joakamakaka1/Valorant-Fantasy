@@ -37,6 +37,30 @@ class SyncService:
         self.match_service = MatchService(db)
         self.stats_service = PlayerMatchStatsService(db, redis=redis)
         self.scraper = VLRScraper()
+        self._tbd_team_cache = None  # Cache para el equipo TBD
+
+    async def _get_or_create_tbd_team(self):
+        """
+        Obtiene o crea el equipo placeholder TBD.
+        Este equipo se usa para matches upcoming donde aún no se conocen los equipos.
+        """
+        if self._tbd_team_cache:
+            return self._tbd_team_cache
+            
+        tbd_team = await self.team_service.repo.get_by_name("TBD")
+        if not tbd_team:
+            tbd_team = await self.team_service.create(
+                name="TBD",
+                region="GLOBAL",
+                logo_url=None
+            )
+            logger.info(f"Created TBD placeholder team (ID: {tbd_team.id})")
+        else:
+            logger.debug(f"Using existing TBD team (ID: {tbd_team.id})")
+        
+        self._tbd_team_cache = tbd_team
+        return tbd_team
+
 
     async def get_matches_from_api(self, q="results"):
         """Obtiene partidos de la API de VLRGGAPI (Asíncrono)"""
@@ -159,18 +183,41 @@ class SyncService:
 
         # 2. Procesar Equipos: asegurar que existen en la DB
         team_models = []
+        
+        # VALIDACIÓN CRÍTICA: Verificar que tenemos exactamente 2 equipos con nombres válidos
+        if len(details["teams"]) < 2:
+            logger.error(f"Match {vlr_id}: Scraper returned less than 2 teams ({len(details['teams'])}). Teams data: {details['teams']}")
+            return
+        
         for t_info in details["teams"]:
-            team = await self.team_service.repo.get_by_name(t_info["name"])
+            team_name = t_info.get("name", "").strip()
+            
+            # Si el equipo es TBD, usar el team TBD persistente
+            if not team_name or team_name.upper() == "TBD":
+                team = await self._get_or_create_tbd_team()
+                logger.debug(f"Match {vlr_id}: Using TBD placeholder team (ID: {team.id})")
+                team_models.append(team)
+                continue
+            
+            # Validar que el nombre del equipo no esté vacío (ya sabemos que no es TBD)
+            if len(team_name) < 2:
+                logger.error(f"Match {vlr_id}: Team name too short: '{team_name}'. Full team data: {t_info}")
+                return
+            
+            # Procesar equipo real
+            team = await self.team_service.repo.get_by_name(team_name)
             if not team:
                 team = await self.team_service.create(
-                    name=t_info["name"], region=event["region"], logo_url=t_info["logo_url"]
+                    name=team_name, region=event["region"], logo_url=t_info["logo_url"]
                 )
+                logger.info(f"Created new team: {team_name} (ID: {team.id})")
             elif t_info["logo_url"] and not team.logo_url:
                 await self.team_service.update(team.id, {"logo_url": t_info["logo_url"]})
             team_models.append(team)
 
-        # Si no hay 2 equipos (ej: TBD vs TBD mal scrapeado), salimos para no romper nada
+        # Doble verificación de seguridad
         if len(team_models) < 2: 
+            logger.error(f"Match {vlr_id}: Failed to create/find 2 teams. Only got {len(team_models)} teams.")
             return
 
         # 3. Procesar Partido: Crear o Actualizar
@@ -179,7 +226,10 @@ class SyncService:
             "date": details.get("date"),
             "score_team_a": final_score_a,
             "score_team_b": final_score_b,
-            "format": self.deduce_format(final_score_a, final_score_b)
+            "format": self.deduce_format(final_score_a, final_score_b),
+            # CRÍTICO: Siempre actualizar team_a_id y team_b_id para reemplazar TBD teams
+            "team_a_id": team_models[0].id,
+            "team_b_id": team_models[1].id
         }
 
         if not existing_match:
@@ -188,8 +238,6 @@ class SyncService:
                 "vlr_match_id": vlr_id,
                 "tournament_name": event["name"],
                 "vlr_url": f"{self.scraper.vlr_base_url}{details.get('url', '')}",
-                "team_a_id": team_models[0].id,
-                "team_b_id": team_models[1].id,
                 **match_data
             }
             # Usamos date del existing o del details si es nuevo
@@ -208,6 +256,10 @@ class SyncService:
             if old_status != status:
                 logger.info(f"Match {vlr_id} status changed: {old_status} -> {status}")
             
+            # Log team updates para debugging
+            if existing_match.team_a_id != team_models[0].id or existing_match.team_b_id != team_models[1].id:
+                logger.info(f"Match {vlr_id} teams updated: ({existing_match.team_a_id}, {existing_match.team_b_id}) -> ({team_models[0].id}, {team_models[1].id})")
+            
             await self.match_service.update(existing_match.id, match_data)
 
         # 4. Procesar Jugadores y Estadísticas
@@ -217,6 +269,18 @@ class SyncService:
         else:
             stats_created = 0
             stats_updated = 0
+            
+            # VALIDACIÓN: Verificar que tenemos stats de jugadores
+            if not details["players"]:
+                logger.error(f"Match {vlr_id}: No player stats found despite status=completed")
+            else:
+                # Validar conteo de jugadores por equipo
+                team_0_count = sum(1 for p in details["players"] if p["team_index"] == 0)
+                team_1_count = sum(1 for p in details["players"] if p["team_index"] == 1)
+                logger.info(f"Match {vlr_id}: Player count - Team A: {team_0_count}, Team B: {team_1_count}")
+                
+                if team_0_count < 5 or team_1_count < 5:
+                    logger.warning(f"Match {vlr_id}: Incomplete player roster (expected 5 per team)")
             
             for p_stats in details["players"]:
                 try:
@@ -235,7 +299,9 @@ class SyncService:
                             # Concurrencia: si se creó justo en otro hilo
                             player = await self.player_service.repo.get_by_name(p_stats["name"])
                     
-                    if not player: continue # Skip si falló todo
+                    if not player: 
+                        logger.error(f"Match {vlr_id}: Failed to create/find player {p_stats['name']}")
+                        continue
 
                     # Actualizar equipo del jugador si ha cambiado (importante para TBD -> Equipo Real)
                     if player.team_id != current_team.id:
@@ -245,7 +311,7 @@ class SyncService:
                     stat_data = {
                         "agent": p_stats["agent"],
                         "kills": p_stats["kills"],
-                        "death": p_stats["deaths"], # Verifica si tu modelo es 'death' o 'deaths'
+                        "death": p_stats["deaths"],
                         "assists": p_stats["assists"],
                         "acs": p_stats["acs"],
                         "adr": p_stats["adr"],
@@ -268,19 +334,27 @@ class SyncService:
                         # UPDATE: Actualizamos los valores existentes
                         for k, v in stat_data.items():
                             setattr(existing_stat, k, v)
+                        
+                        # CRÍTICO: Recalcular fantasy points después de actualizar stats
+                        existing_stat.fantasy_points_earned = await self.stats_service.calculate_fantasy_points(existing_stat, existing_match)
                         stats_updated += 1
                     else:
-                        # INSERT: Creamos nueva
+                        # INSERT: Creamos nueva stat
                         new_stat = PlayerMatchStats(
                             match_id=existing_match.id,
                             player_id=player.id,
                             **stat_data
                         )
+                        
+                        # CRÍTICO: Calcular fantasy points ANTES de añadir a la DB
+                        new_stat.fantasy_points_earned = await self.stats_service.calculate_fantasy_points(new_stat, existing_match)
                         self.db.add(new_stat)
                         stats_created += 1
+                        
+                        logger.debug(f"Player {p_stats['name']}: {new_stat.fantasy_points_earned:.2f} fantasy points")
 
                 except Exception as e:
-                    logger.error(f"Error procesando jugador {p_stats.get('name')}: {e}")
+                    logger.error(f"Error procesando jugador {p_stats.get('name')} en match {vlr_id}: {e}", exc_info=True)
                     continue
             
             # Log stats processing results

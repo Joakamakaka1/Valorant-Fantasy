@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import sys
+import traceback
 from datetime import datetime
 from app.db.session import SessionLocal, AsyncSessionLocal
 from app.service.sync import SyncService
@@ -28,6 +29,7 @@ async def run_sync():
             logger.info(f"--- WORKER SYNC COMPLETE. Matches processed/updated: {count} ---")
         except Exception as e:
             logger.error(f"Error during worker sync: {e}")
+            logger.error(f"Full traceback:\n{traceback.format_exc()}")
         finally:
             await redis.close()
 
