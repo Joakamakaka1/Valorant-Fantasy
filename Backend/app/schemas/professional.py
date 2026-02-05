@@ -31,6 +31,7 @@ class PlayerUpdate(BaseModel):
     role: Optional[Literal["Duelist", "Initiator", "Controller", "Sentinel", "Flex"]] = None
     current_price: Optional[float] = Field(None, gt=0)
     points: Optional[float] = Field(None, ge=0)
+    photo_url: Optional[str] = None
 
 # ============================================================================
 # SCHEMAS BÁSICOS (sin relaciones) - Para usar dentro de otros schemas
@@ -50,6 +51,7 @@ class PlayerBasic(BaseModel):
     name: str
     team_id: Optional[int] = None
     role: Literal["Duelist", "Initiator", "Controller", "Sentinel", "Flex"]
+    photo_url: Optional[str] = None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -77,6 +79,7 @@ class PlayerOut(BaseModel):
     base_price: float
     points: float
     matches_played: int
+    photo_url: Optional[str] = None
     
     # Relaciones para conveniencia del frontend
     team: Optional[TeamBasic] = None

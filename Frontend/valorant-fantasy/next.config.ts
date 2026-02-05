@@ -14,6 +14,11 @@ const nextConfig: NextConfig = {
         hostname: "owcdn.net",
         pathname: "/**",
       },
+      {
+        protocol: "https",
+        hostname: "liquipedia.net",
+        pathname: "/**",
+      },
     ],
     formats: ["image/avif", "image/webp"],
   },

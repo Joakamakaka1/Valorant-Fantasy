@@ -39,6 +39,7 @@ class Player(Base):
     base_price = Column(Float, default=0.0)
     points = Column(Float, default=0.0)
     matches_played = Column(Integer, default=0)
+    photo_url = Column(String(512), nullable=True)  # Player photo from Liquipedia
 
     team = relationship("Team", back_populates="players")
     price_history = relationship("PriceHistoryPlayer", back_populates="player")

@@ -21,6 +21,11 @@ def async_retry_with_backoff(
     """
     Decorador para reintentos con Exponential Backoff en funciones async.
     
+    Incluye manejo inteligente de:
+    - 429 (Rate Limiting): Respeta header Retry-After si está presente
+    - 503 (Service Unavailable): Backoff exponencial
+    - Otros errores HTTP: No reintentar (fallar rápido)
+    
     Args:
         max_retries: Número máximo de reintentos
         base_delay: Delay inicial en segundos
@@ -36,6 +41,51 @@ def async_retry_with_backoff(
             for attempt in range(max_retries + 1):
                 try:
                     return await func(*args, **kwargs)
+                
+                except httpx.HTTPStatusError as e:
+                    last_exception = e
+                    
+                    # Manejo específico de 429 (Rate Limiting)
+                    if e.response.status_code == 429:
+                        # Intentar leer Retry-After header
+                        retry_after = e.response.headers.get("Retry-After")
+                        if retry_after:
+                            try:
+                                delay = min(float(retry_after), max_delay)
+                            except ValueError:
+                                # Retry-After puede ser una fecha, usar backoff exponencial
+                                delay = min(base_delay * (exponential_base ** attempt), max_delay)
+                        else:
+                            delay = min(base_delay * (exponential_base ** attempt), max_delay)
+                        
+                        logger.warning(
+                            f"Rate limit hit (429) in {func.__name__}. "
+                            f"Retrying after {delay:.2f}s (attempt {attempt + 1}/{max_retries})"
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    
+                    # Manejo de 503 (Service Unavailable)
+                    if e.response.status_code == 503:
+                        if attempt == max_retries:
+                            logger.error(f"Max retries reached for 503 in {func.__name__}")
+                            raise
+                        
+                        delay = min(base_delay * (exponential_base ** attempt), max_delay)
+                        logger.warning(
+                            f"Service unavailable (503) in {func.__name__}. "
+                            f"Retrying in {delay:.2f}s (attempt {attempt + 1}/{max_retries})..."
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    
+                    # Otros errores HTTP: no reintentar (fail fast)
+                    logger.error(
+                        f"HTTP error {e.response.status_code} in {func.__name__}: {e}. "
+                        f"Not retrying."
+                    )
+                    raise
+                
                 except exceptions as e:
                     last_exception = e
                     
@@ -58,9 +108,15 @@ def async_retry_with_backoff(
     return decorator
 
 
+
 class VLRScraper:
     """
     Scraper para VLR.gg con reintentos automáticos y manejo robusto de errores.
+    
+    Features:
+    - User-Agent rotativo para evitar detección
+    - Manejo inteligente de 429/503 con reintentos
+    - Transaccionalidad delegada al servicio que lo usa
     
     NOTA IMPORTANTE - Transaccionalidad Atómica:
     ============================================
@@ -97,11 +153,27 @@ class VLRScraper:
     ```
     """
     
+    # Pool de User-Agents para rotación (evitar detección)
+    USER_AGENTS = [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0",
+    ]
+    
     def __init__(self):
+        import random
         self.vlr_base_url = "https://www.vlr.gg"
+        # User-Agent rotativo + headers para simular navegación orgánica
         self.headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept-Language": "en-US,en;q=0.9"
+            "User-Agent": random.choice(self.USER_AGENTS),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://www.vlr.gg/",
+            "DNT": "1",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
         }
 
     @async_retry_with_backoff(max_retries=3, base_delay=2.0, max_delay=30.0)

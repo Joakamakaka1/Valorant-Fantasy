@@ -13,13 +13,16 @@ from app.core.config import settings
 
 # 1. Configuración SÍNCRONA (Para scripts simples o worker actual)
 DATABASE_URL = settings.database_url
-engine = create_engine(DATABASE_URL, echo=False) # echo=False para producción, o True para debug
+engine = create_engine(
+    DATABASE_URL, 
+    echo=settings.DEBUG  # Echo SQL en desarrollo, silencioso en producción
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 ASYNC_DATABASE_URL = settings.async_database_url.replace("asyncmy", "aiomysql")
 async_engine = create_async_engine(
     ASYNC_DATABASE_URL,
-    echo=False,
+    echo=settings.DEBUG,  # Consistente con engine síncrono
     pool_pre_ping=True
 )
 

@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import sys
+import signal
 import traceback
 from datetime import datetime
 from app.db.session import SessionLocal, AsyncSessionLocal
@@ -14,6 +15,22 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger("vlr_worker")
+
+# Event para shutdown limpio
+shutdown_event = asyncio.Event()
+
+def signal_handler(signum, frame):
+    """
+    Maneja señales SIGTERM/SIGINT para graceful shutdown.
+    Permite que Docker y Ctrl+C detengan el worker limpiamente.
+    """
+    signal_name = signal.Signals(signum).name
+    logger.warning(f"Received signal {signal_name}. Initiating graceful shutdown...")
+    shutdown_event.set()
+
+# Registrar handlers de señales
+signal.signal(signal.SIGTERM, signal_handler)
+signal.signal(signal.SIGINT, signal_handler)
 
 async def run_sync():
     """Execution of the sync task (Async)"""
@@ -34,16 +51,35 @@ async def run_sync():
             await redis.close()
 
 async def main_loop(interval_hours: int = 4):
-    """Main loop for the worker (6 hour interval to check live/upcoming matches)"""
+    """
+    Main loop for the worker with graceful shutdown support.
+    
+    Args:
+        interval_hours: Hours to wait between sync cycles (default: 4)
+    """
     logger.info(f"Worker started. Sync interval: {interval_hours} hours.")
+    logger.info("Worker will respond to SIGTERM/SIGINT for graceful shutdown.")
     
-    # Run once at startup
-    await run_sync()
-    
-    while True:
-        logger.info(f"Worker sleeping for {interval_hours} hours...")
-        await asyncio.sleep(interval_hours * 3600)
+    # Run once at startup (si no se ha recibido señal de shutdown)
+    if not shutdown_event.is_set():
         await run_sync()
+    
+    while not shutdown_event.is_set():
+        try:
+            # Esperar shutdown_event O timeout (lo que ocurra primero)
+            logger.info(f"Worker sleeping for {interval_hours} hours... (Press Ctrl+C to stop)")
+            await asyncio.wait_for(
+                shutdown_event.wait(), 
+                timeout=interval_hours * 3600
+            )
+            # Si llegamos aquí, es porque shutdown_event fue seteado
+            break
+        except asyncio.TimeoutError:
+            # Timeout normal después de interval_hours
+            if not shutdown_event.is_set():
+                await run_sync()
+    
+    logger.info("Worker shut down gracefully. All tasks completed.")
 
 if __name__ == "__main__":
     # You can pass --once to run it only once
@@ -53,4 +89,10 @@ if __name__ == "__main__":
         try:
             asyncio.run(main_loop())
         except KeyboardInterrupt:
-            logger.info("Worker stopped by user.")
+            # Esto no debería alcanzarse ya que SIGINT está manejado
+            logger.info("Worker stopped by user (KeyboardInterrupt).")
+        except Exception as e:
+            logger.error(f"Worker crashed: {e}")
+            logger.error(f"Full traceback:\n{traceback.format_exc()}")
+            sys.exit(1)
+

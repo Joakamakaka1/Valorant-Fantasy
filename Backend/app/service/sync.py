@@ -99,8 +99,8 @@ class SyncService:
                 detected_status = match_info.get("status", "unknown") if isinstance(match_info, dict) else "unknown"
                 
                 # Respetar rate limits del servidor externo
-                logger.info(f"Throttling: Waiting 1.5s...")
-                await asyncio.sleep(1.5)
+                logger.info(f"Throttling: Waiting {settings.SCRAPER_THROTTLE_SECONDS}s...")
+                await asyncio.sleep(settings.SCRAPER_THROTTLE_SECONDS)
 
                 parts = [p for p in match_url.split("/") if p]
                 if not parts: continue

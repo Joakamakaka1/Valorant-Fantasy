@@ -114,6 +114,7 @@ export interface Player {
   base_price: number;
   points: number;
   matches_played: number;
+  photo_url: string | null;
   team?: Team; // Optional relation loaded via join
 }
 

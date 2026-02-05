@@ -75,6 +75,9 @@ class Settings:
     # External APIs (VLRGGAPI)
     VLR_API_BASE_URL: str = os.getenv("VLR_API_BASE_URL", "https://vlr.gg")
     
+    # Scraping Configuration
+    SCRAPER_THROTTLE_SECONDS: float = float(os.getenv("SCRAPER_THROTTLE_SECONDS", "1.5"))
+    
     # Redis Settings
     REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
     REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))

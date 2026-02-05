@@ -1,8 +1,10 @@
 "use client";
 
 import { LeagueMember, Team } from "@/lib/types";
-import { Users, TrendingUp, Activity, Zap, Award } from "lucide-react";
+import { TrendingUp, Activity, Zap, Award, Users } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { PodiumCard } from "./podium-card";
+import { StatCard } from "./stat-card";
 
 interface LeagueRankingsProps {
   members: LeagueMember[];
@@ -36,13 +38,6 @@ export function LeagueRankings({
   // Calculate biggest rank climber (simulated, could be based on history)
   const biggestClimber = sortedMembers[Math.min(3, sortedMembers.length - 1)];
 
-  // Podium gradient classes for each position
-  const podiumGradients = [
-    "from-yellow-500/20 via-amber-500/10 to-transparent", // 1st - Gold
-    "from-cyan-500/20 via-blue-500/10 to-transparent", // 2nd - Cyan/Blue
-    "from-orange-500/20 via-red-500/10 to-transparent", // 3rd - Orange/Red
-  ];
-
   return (
     <div className="space-y-6">
       {/* Top 3 Podium - Olympic Style */}
@@ -53,184 +48,67 @@ export function LeagueRankings({
           if (!member) return null;
 
           const actualRank = podiumIndex + 1;
-          const proTeam = proTeams.find(
-            (t: Team) => t.id === member.selected_team_id,
-          );
-          const isCurrentUser = member.user_id === currentUserId;
           const isFirstPlace = podiumIndex === 0;
 
           return (
-            <Card
+            <PodiumCard
               key={member.id}
-              className={`bg-gradient-to-b ${podiumGradients[podiumIndex]} border-zinc-800 overflow-hidden relative group hover:border-[#ff4655]/30 transition-all ${
-                isFirstPlace ? "md:mt-0" : "md:mt-8"
-              }`}
-            >
-              <CardContent className="p-5">
-                {/* Rank Badge */}
-                <div className="flex justify-center mb-4">
-                  <div className="bg-zinc-900/80 backdrop-blur-sm text-white text-lg font-black uppercase px-4 py-1 rounded-lg shadow-lg border border-zinc-700">
-                    #{actualRank}
-                  </div>
-                </div>
-
-                {/* Avatar/Logo */}
-                <div className="flex flex-col items-center mb-4">
-                  <div className="size-20 rounded-full bg-zinc-900 border-2 border-zinc-700 flex items-center justify-center mb-3 shadow-lg overflow-hidden relative">
-                    {proTeam?.logo_url ? (
-                      <img
-                        src={proTeam.logo_url}
-                        alt={proTeam.name}
-                        className="size-12 object-contain opacity-80"
-                      />
-                    ) : (
-                      <Users className="size-10 text-zinc-600" />
-                    )}
-                  </div>
-
-                  {/* Name */}
-                  <div className="text-center">
-                    <h4 className="font-black text-white text-lg uppercase italic leading-tight mb-1">
-                      {member.team_name}
-                    </h4>
-                    <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">
-                      @{member.user?.username || "Loading..."}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Stats Grid */}
-                <div className="grid grid-cols-3 gap-2 mb-3">
-                  <div className="text-center">
-                    <p className="text-[8px] text-zinc-500 uppercase font-black mb-0.5">
-                      Points
-                    </p>
-                    <p className="text-sm font-black text-emerald-400 italic">
-                      {member.total_points.toFixed(0)}
-                    </p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-[8px] text-zinc-500 uppercase font-black mb-0.5">
-                      Value
-                    </p>
-                    <p className="text-sm font-black text-white italic">
-                      €
-                      {member.team_value
-                        ? (member.team_value / 1000000).toFixed(1)
-                        : "0.0"}
-                      M
-                    </p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-[8px] text-zinc-500 uppercase font-black mb-0.5">
-                      Score
-                    </p>
-                    <p className="text-sm font-black text-zinc-400 italic">
-                      {Math.round(
-                        (member.total_points / 100 +
-                          (member.team_value || 0) / 1000000) *
-                          10,
-                      )}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+              member={member}
+              rank={actualRank}
+              podiumIndex={podiumIndex}
+              proTeams={proTeams}
+              currentUserId={currentUserId}
+              isFirstPlace={isFirstPlace}
+            />
           );
         })}
       </div>
 
       {/* Highlighted Statistics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {/* Highest Scorer */}
-        <Card className="bg-zinc-900/40 border-zinc-800 hover:border-[#ff4655]/30 transition-all">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="size-8 rounded-full bg-emerald-500/10 flex items-center justify-center">
-                <Award className="size-4 text-emerald-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[8px] text-zinc-500 uppercase font-black tracking-wider">
-                  Top Scorer
-                </p>
-                <p className="text-xs font-black text-white uppercase italic truncate">
-                  {highestPoints?.team_name || "N/A"}
-                </p>
-              </div>
-              <span className="text-lg font-black text-emerald-400 italic">
-                {highestPoints?.total_points.toFixed(0) || 0}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+        <StatCard
+          icon={Award}
+          iconColor="text-emerald-400"
+          iconBg="bg-emerald-500/10"
+          label="Top Scorer"
+          teamName={highestPoints?.team_name || "N/A"}
+          value={highestPoints?.total_points.toFixed(0) || "0"}
+          valueColor="text-emerald-400"
+        />
 
-        {/* Most Valuable */}
-        <Card className="bg-zinc-900/40 border-zinc-800 hover:border-[#ff4655]/30 transition-all">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="size-8 rounded-full bg-amber-500/10 flex items-center justify-center">
-                <TrendingUp className="size-4 text-amber-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[8px] text-zinc-500 uppercase font-black tracking-wider">
-                  Most Valuable
-                </p>
-                <p className="text-xs font-black text-white uppercase italic truncate">
-                  {mostValuableTeam?.team_name || "N/A"}
-                </p>
-              </div>
-              <span className="text-lg font-black text-amber-400 italic">
-                {mostValuableTeam
-                  ? `€${(mostValuableTeam.team_value / 1000000).toFixed(1)}M`
-                  : "€0M"}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+        <StatCard
+          icon={TrendingUp}
+          iconColor="text-amber-400"
+          iconBg="bg-amber-500/10"
+          label="Most Valuable"
+          teamName={mostValuableTeam?.team_name || "N/A"}
+          value={
+            mostValuableTeam
+              ? `€${(mostValuableTeam.team_value / 1000000).toFixed(1)}M`
+              : "€0M"
+          }
+          valueColor="text-amber-400"
+        />
 
-        {/* Biggest Climber */}
-        <Card className="bg-zinc-900/40 border-zinc-800 hover:border-[#ff4655]/30 transition-all">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="size-8 rounded-full bg-blue-500/10 flex items-center justify-center">
-                <Zap className="size-4 text-blue-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[8px] text-zinc-500 uppercase font-black tracking-wider">
-                  Rising Star
-                </p>
-                <p className="text-xs font-black text-white uppercase italic truncate">
-                  {biggestClimber?.team_name || "N/A"}
-                </p>
-              </div>
-              <span className="text-lg font-black text-blue-400 italic">
-                +2
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+        <StatCard
+          icon={Zap}
+          iconColor="text-blue-400"
+          iconBg="bg-blue-500/10"
+          label="Rising Star"
+          teamName={biggestClimber?.team_name || "N/A"}
+          value="+2"
+          valueColor="text-blue-400"
+        />
 
-        {/* Most Budget Left */}
-        <Card className="bg-zinc-900/40 border-zinc-800 hover:border-[#ff4655]/30 transition-all">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="size-8 rounded-full bg-[#ff4655]/10 flex items-center justify-center">
-                <Activity className="size-4 text-[#ff4655]" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[8px] text-zinc-500 uppercase font-black tracking-wider">
-                  Cash Reserve
-                </p>
-                <p className="text-xs font-black text-white uppercase italic truncate">
-                  {mostBudgetLeft?.team_name || "N/A"}
-                </p>
-              </div>
-              <span className="text-lg font-black text-[#ff4655] italic">
-                €{mostBudgetLeft?.budget.toFixed(1) || 0}M
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+        <StatCard
+          icon={Activity}
+          iconColor="text-[#ff4655]"
+          iconBg="bg-[#ff4655]/10"
+          label="Cash Reserve"
+          teamName={mostBudgetLeft?.team_name || "N/A"}
+          value={`€${mostBudgetLeft?.budget.toFixed(1) || 0}M`}
+          valueColor="text-[#ff4655]"
+        />
       </div>
 
       {/* Full Rankings Table */}
