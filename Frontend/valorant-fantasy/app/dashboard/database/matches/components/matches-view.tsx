@@ -111,19 +111,17 @@ export function MatchesView() {
         {/* Region Filters */}
         <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap no-scrollbar">
           {regions.map((region) => (
-            <Button
+            <button
               key={region}
-              variant={currentRegion === region ? "outline" : "ghost"}
-              size="sm"
-              className={`h-8 px-3 md:px-4 font-black uppercase tracking-tighter italic transition-all text-xs md:text-sm shrink-0 ${
-                currentRegion === region
-                  ? "border-[#ff4655] bg-[#ff4655]/10 text-white"
-                  : "text-zinc-500 hover:text-white"
-              }`}
               onClick={() => setCurrentRegion(region)}
+              className={`px-4 py-2 rounded-lg text-xs font-black uppercase italic transition-all border ${
+                currentRegion === region
+                  ? "bg-[#ff4655] text-white border-[#ff4655] shadow-lg"
+                  : "bg-zinc-900/40 text-zinc-500 border-zinc-800 hover:border-zinc-700 hover:text-white"
+              }`}
             >
               {region}
-            </Button>
+            </button>
           ))}
         </div>
 

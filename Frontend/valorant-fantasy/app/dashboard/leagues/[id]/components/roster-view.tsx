@@ -340,7 +340,7 @@ export function RosterView({ member, roster, allPlayers }: RosterViewProps) {
                                       {player.team?.name} • {player.region}
                                     </div>
                                     <div className="flex items-center gap-2">
-                                      <div className="flex items-center gap-1.5 px-2 py-0.5 rounded">
+                                      <div className="flex items-center gap-1.5 py-0.5 rounded">
                                         <span className="text-sm sm:text-xs font-black text-emerald-400">
                                           {player.points.toFixed(1)}
                                         </span>
