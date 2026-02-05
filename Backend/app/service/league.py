@@ -3,7 +3,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload, selectinload
 from typing import List, Optional
 from app.db.models.league import League, LeagueMember, Roster
-from app.db.models.professional import Player
 from app.core.exceptions import AppError
 from app.core.constants import ErrorCode
 from app.core.decorators import transactional

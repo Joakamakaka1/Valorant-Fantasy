@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Optional, Any
+from typing import Optional
 from redis import asyncio as aioredis
 from redis.exceptions import RedisError, ConnectionError, TimeoutError
 
@@ -117,7 +117,7 @@ class RedisCache:
             
             return True
         
-        except (RedisError, TypeError, json.JSONEncodeError) as e:
+        except (RedisError, TypeError) as e:
             logger.error(f"Redis SET error for key '{key}': {type(e).__name__} - {str(e)}")
             return False
     

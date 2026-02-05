@@ -13,7 +13,6 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import IntegrityError, OperationalError, DataError
 from starlette.responses import StreamingResponse
-# from app.core.background import sync_vlr_task # Ya no es necesario
 
 from app.api.v1 import api_router
 from app.db import models # Register models

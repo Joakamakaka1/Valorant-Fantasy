@@ -4,7 +4,7 @@ import sys
 import signal
 import traceback
 from datetime import datetime
-from app.db.session import SessionLocal, AsyncSessionLocal
+from app.db.session import AsyncSessionLocal
 from app.service.sync import SyncService
 
 # Configure logging

@@ -9,7 +9,7 @@ from app.core.constants import ErrorCode
 from app.core.decorators import transactional
 from app.repository.match import MatchRepository, PlayerMatchStatsRepository
 from app.core.redis import RedisCache
-from app.schemas.match import PlayerMatchStatsOut
+from app.schemas.match import PlayerMatchStatsOut, MatchOut
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,11 @@ class MatchService:
     '''
     Servicio que maneja la lógica de negocio de partidos (Asíncrono).
     Se encarga de crear, actualizar, obtener y borrar partidos, además de gestionar las consultas con filtros.
+    
+    Implementa caché selectiva para partidos completados (datos inmutables).
     '''
+    CACHE_KEY_PREFIX = "match_detail:"
+    
     def __init__(self, db: AsyncSession, redis: Optional[RedisCache] = None):
         self.db = db
         self.repo = MatchRepository(db)
@@ -34,10 +38,43 @@ class MatchService:
     async def get_all(self, skip: int = 0, limit: int = 100) -> List[Match]:
         return await self.repo.get_all(skip=skip, limit=limit, options=self._get_match_options())
 
-    async def get_by_id(self, match_id: int) -> Optional[Match]:
+    async def get_by_id(self, match_id: int) -> Optional[Any]:
+        """
+        Obtiene un partido por ID con caché condicional.
+        
+        REGLA: Solo cachea partidos completados (status == "completed") sin TTL,
+        ya que los datos históricos son inmutables. Los partidos "upcoming" o "live"
+        no se cachean para garantizar datos en tiempo real.
+        """
+        cache_key = f"{self.CACHE_KEY_PREFIX}{match_id}"
+        
+        # Intentar obtener de caché
+        if self.redis:
+            cached_response = await self.redis.get(cache_key)
+            if cached_response and "success" in cached_response:
+                match_data = cached_response.get("data")
+                logger.info(f"CACHE_HIT: Match {match_id} found in Redis")
+                return match_data
+        
+        # Caché miss o Redis no disponible: consultar DB
+        logger.info(f"CACHE_MISS: Fetching match {match_id} from database")
         match = await self.repo.get_by_id(match_id, options=self._get_match_options())
         if not match:
             raise AppError(404, ErrorCode.NOT_FOUND, "El partido no existe")
+        
+        # REGLA: Solo cachear partidos completados (inmutables)
+        if self.redis and match.status == "completed":
+            # Usar schema para serialización correcta (maneja relaciones y datetime)
+            match_dict = MatchOut.model_validate(match).model_dump(mode='json')
+            await self.redis.set(
+                cache_key,
+                {"success": True, "data": match_dict}
+                # Sin TTL - datos inmutables una vez completados
+            )
+            logger.info(f"Match {match_id} cached (status: completed)")
+        elif match.status != "completed":
+            logger.info(f"Match {match_id} NOT cached (status: {match.status} - datos cambiantes)")
+        
         return match
 
     async def get_by_status(self, status: str) -> List[Match]:
@@ -104,7 +141,16 @@ class MatchService:
         match = await self.repo.get(match_id)
         if not match:
             raise AppError(404, ErrorCode.NOT_FOUND, "El partido no existe")
-        return await self.repo.update(match_id, match_data, options=self._get_match_options())
+        
+        updated_match = await self.repo.update(match_id, match_data, options=self._get_match_options())
+        
+        # Invalidar caché si existe (el match puede haber cambiado de estado o datos)
+        if self.redis:
+            cache_key = f"{self.CACHE_KEY_PREFIX}{match_id}"
+            await self.redis.delete(cache_key)
+            logger.info(f"Cache invalidated for match {match_id} after update")
+        
+        return updated_match
 
     @transactional
     async def mark_as_processed(self, match_id: int) -> Match:

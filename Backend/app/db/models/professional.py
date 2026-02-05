@@ -50,6 +50,10 @@ class Player(Base):
     __table_args__ = (
         # Performance Index: Búsqueda rápida por nombre de jugador
         Index('idx_player_name', 'name'),
+        # Performance Index: Filtrado por rol (Duelist, Initiator, etc.)
+        Index('idx_player_role', 'role'),
+        # Performance Index: Filtrado por región (EMEA, Americas, etc.)
+        Index('idx_player_region', 'region'),
     )
 
 class PriceHistoryPlayer(Base):

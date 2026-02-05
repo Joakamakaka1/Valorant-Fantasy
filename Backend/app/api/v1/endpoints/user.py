@@ -1,7 +1,5 @@
 from typing import List
-from fastapi import APIRouter, Depends, status
-
-from fastapi import APIRouter, Depends, status, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, status, UploadFile, File
 from app.service.image import image_service
 from app.service.user import UserService
 from app.schemas.user import UserCreate, UserUpdate, UserOut, UserLogin, Token, RoleUpdate, TokenRefresh

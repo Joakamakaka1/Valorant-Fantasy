@@ -8,7 +8,7 @@ from app.core.constants import ErrorCode
 from app.core.decorators import transactional
 from app.repository.professional import TeamRepository, PlayerRepository, PriceHistoryRepository
 from app.core.redis import RedisCache
-from app.schemas.professional import PlayerOut
+from app.schemas.professional import PlayerOut, TeamOut
 
 logger = logging.getLogger(__name__)
 
@@ -16,15 +16,54 @@ class TeamService:
     '''
     Servicio que maneja la lógica de negocio de equipos profesionales (Asíncrono).
     Se encarga de gestionar las operaciones CRUD para los equipos.
+    
+    Implementa caché agresiva para equipos ya que sus datos cambian muy raramente.
+    Utiliza Redis para almacenar la lista completa de equipos y optimizar lecturas.
     '''
-    def __init__(self, db: AsyncSession):
+    CACHE_KEY_ALL_TEAMS = "all_teams_cache"
+    
+    def __init__(self, db: AsyncSession, redis: Optional[RedisCache] = None):
         self.db = db
         # Inicialización del repositorio para acceso a datos de equipos
         self.repo = TeamRepository(db)
+        self.redis = redis
 
-    async def get_all(self, skip: int = 0, limit: int = 100) -> List[Team]:
-        # Recupera una lista paginada de todos los equipos
-        return await self.repo.get_all(skip=skip, limit=limit)
+    async def get_all(self, skip: int = 0, limit: int = 100) -> List[Any]:
+        """
+        Obtiene todos los equipos con caché agresiva.
+        
+        Caché sin TTL en 'all_teams_cache' (datos casi estáticos).
+        Retorna una lista de diccionarios si está en caché para saltar validación Pydantic,
+        lo cual mejora significativamente el rendimiento.
+        """
+        # Intentar obtener de caché
+        if self.redis:
+            cached_response = await self.redis.get(self.CACHE_KEY_ALL_TEAMS)
+            if cached_response and "success" in cached_response:
+                teams_data = cached_response.get("data", [])
+                logger.info(f"CACHE_HIT: {len(teams_data)} teams found in '{self.CACHE_KEY_ALL_TEAMS}'")
+                
+                # Aplicar skip y limit en memoria sobre los datos cacheados
+                if skip or limit < len(teams_data):
+                    teams_data = teams_data[skip:skip + limit]
+                
+                return teams_data
+        
+        # Caché miss o Redis no disponible: consultar DB
+        logger.info(f"CACHE_MISS: Fetching all teams from database")        
+        teams = await self.repo.get_all(skip=0, limit=10000)
+        
+        # Guardar en caché (sin TTL, datos casi estáticos)
+        if self.redis and teams:
+            # Usar schema para serialización correcta antes de guardar en Redis
+            teams_dict = [TeamOut.model_validate(team).model_dump(mode='json') for team in teams]
+            await self.redis.set(
+                self.CACHE_KEY_ALL_TEAMS,
+                {"success": True, "data": teams_dict}
+            )
+        
+        # Aplicar paginación a los datos recién obtenidos de la DB
+        return teams[skip:skip + limit] if (skip or limit < len(teams)) else teams
 
     async def get_by_id(self, team_id: int) -> Optional[Team]:
         # Busca un equipo por su ID, lanza error si no existe
@@ -44,7 +83,14 @@ class TeamService:
             raise AppError(409, ErrorCode.DUPLICATED, f"El equipo '{name}' ya existe")
         
         team = Team(name=name, region=region, logo_url=logo_url)
-        return await self.repo.create(team)
+        created_team = await self.repo.create(team)
+        
+        # Invalidar caché después del commit exitoso para mantener consistencia
+        if self.redis:
+            await self.redis.delete(self.CACHE_KEY_ALL_TEAMS)
+            logger.info("Cache invalidated after team creation")
+        
+        return created_team
 
     @transactional
     async def update(self, team_id: int, team_data: dict) -> Team:
@@ -58,13 +104,25 @@ class TeamService:
             if existing_team and existing_team.id != team_id:
                 raise AppError(409, ErrorCode.DUPLICATED, "El nombre del equipo ya está en uso")
         
-        return await self.repo.update(team_id, team_data)
+        updated_team = await self.repo.update(team_id, team_data)
+        
+        # Invalidar caché después del commit exitoso
+        if self.redis:
+            await self.redis.delete(self.CACHE_KEY_ALL_TEAMS)
+            logger.info("Cache invalidated after team update")
+        
+        return updated_team
 
     @transactional
     async def delete(self, team_id: int) -> None:
         # Elimina un equipo si existe
         if not await self.repo.delete(team_id):
             raise AppError(404, ErrorCode.NOT_FOUND, "El equipo no existe")
+        
+        # Invalidar caché después del commit exitoso
+        if self.redis:
+            await self.redis.delete(self.CACHE_KEY_ALL_TEAMS)
+            logger.info("Cache invalidated after team deletion")
 
 
 class PlayerService:

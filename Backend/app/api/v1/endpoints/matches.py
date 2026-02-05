@@ -1,4 +1,4 @@
-from typing import List, Optional, Any
+from typing import List, Optional 
 from fastapi import APIRouter, Depends, status, Query
 from fastapi.responses import JSONResponse
 from app.auth.deps import get_current_user

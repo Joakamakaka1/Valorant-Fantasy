@@ -29,7 +29,7 @@ class LeagueMember(Base):
     __tablename__ = "leagues_members"
 
     id = Column(Integer, primary_key=True, index=True)
-    league_id = Column(Integer, ForeignKey("leagues.id"), nullable=False)
+    league_id = Column(Integer, ForeignKey("leagues.id"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     team_name = Column(String(255), nullable=False)
     budget = Column(Float, default=100.0)
@@ -57,7 +57,7 @@ class Roster(Base):
     __tablename__ = "rosters"
 
     id = Column(Integer, primary_key=True, index=True)
-    league_member_id = Column(Integer, ForeignKey("leagues_members.id"), nullable=False)
+    league_member_id = Column(Integer, ForeignKey("leagues_members.id"), nullable=False, index=True)
     player_id = Column(Integer, ForeignKey("players.id"), nullable=False)
     is_starter = Column(Boolean, default=False)
     is_bench = Column(Boolean, default=False)

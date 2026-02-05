@@ -1,6 +1,5 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, Float, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
-from datetime import datetime
 from app.db.base import Base
 
 class Match(Base):
@@ -16,8 +15,8 @@ class Match(Base):
     is_processed = Column(Boolean, default=False)
     format = Column(String(50), nullable=True) # Bo3, Bo5
     
-    team_a_id = Column(Integer, ForeignKey("teams.id"), nullable=True) 
-    team_b_id = Column(Integer, ForeignKey("teams.id"), nullable=True)
+    team_a_id = Column(Integer, ForeignKey("teams.id"), nullable=True, index=True) 
+    team_b_id = Column(Integer, ForeignKey("teams.id"), nullable=True, index=True)
     score_team_a = Column(Integer, default=0)
     score_team_b = Column(Integer, default=0)
 
@@ -29,6 +28,10 @@ class Match(Base):
     __table_args__ = (
         # Performance Index: Búsqueda rápida por fecha (rankings, filtros temporales)
         Index('idx_match_date', 'date'),
+        # Performance Index: Filtrado por estado (upcoming, live, completed)
+        Index('idx_match_status', 'status'),
+        # Performance Index (Compuesto): Worker busca completed + no procesados
+        Index('idx_match_status_processed', 'status', 'is_processed'),
     )
 
 class PlayerMatchStats(Base):

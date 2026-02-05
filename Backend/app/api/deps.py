@@ -60,8 +60,8 @@ def get_player_match_stats_service(db: AsyncSession = Depends(get_async_db), red
 # PROFESSIONAL SERVICES
 # ============================================================================
 
-def get_team_service(db: AsyncSession = Depends(get_async_db)) -> TeamService:
-    return TeamService(db)
+def get_team_service(db: AsyncSession = Depends(get_async_db), redis: RedisCache = Depends(get_redis_cache)) -> TeamService:
+    return TeamService(db, redis=redis)
 
 def get_player_service(db: AsyncSession = Depends(get_async_db), redis: RedisCache = Depends(get_redis_cache)) -> PlayerService:
     return PlayerService(db, redis=redis)

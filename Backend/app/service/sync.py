@@ -2,7 +2,7 @@ import httpx
 from bs4 import BeautifulSoup
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select, delete
-from app.db.models.professional import Team, Player, Region, PlayerRole
+from app.db.models.professional import Player
 from app.db.models.match import Match, PlayerMatchStats
 from app.db.models.league import Roster, LeagueMember
 from app.db.models.stats import UserPointsHistory

@@ -7,7 +7,7 @@ from app.core.exceptions import AppError, AlreadyExistsException
 from app.service.league import LeagueService, LeagueMemberService, RosterService
 from app.schemas.league import (
     LeagueCreate, LeagueUpdate, LeagueOut,
-    LeagueMemberCreate, LeagueMemberUpdate, LeagueMemberOut,
+    LeagueMemberUpdate, LeagueMemberOut,
     RosterCreate, RosterUpdate, RosterOut
 )
 from app.schemas.responses import StandardResponse
