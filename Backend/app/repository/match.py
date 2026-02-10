@@ -3,8 +3,7 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models.match import Match, PlayerMatchStats
 from typing import List, Optional
-from datetime import datetime
-
+from datetime import datetime, timedelta
 from app.repository.base import BaseRepository
 
 class MatchRepository(BaseRepository[Match]):
@@ -58,7 +57,6 @@ class MatchRepository(BaseRepository[Match]):
         return list(result.scalars().all())
 
     async def get_recent(self, days: int = 7, options: Optional[List] = None) -> List[Match]:
-        from datetime import timedelta
         cutoff_date = datetime.utcnow() - timedelta(days=days)
         query = (
             select(Match)

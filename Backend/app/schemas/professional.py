@@ -21,16 +21,16 @@ class PlayerCreate(BaseModel):
     team_id: Optional[int] = None
     role: Literal["Duelist", "Initiator", "Controller", "Sentinel", "Flex"]
     region: Literal["EMEA", "Americas", "Pacific", "CN"]
-    current_price: float = Field(..., gt=0)
-    base_price: float = Field(..., gt=0)
-    points: float = Field(default=0.0, ge=0)
+    current_price: float = Field(..., gt=0, le=85.0)  # Cap: 85M
+    base_price: float = Field(..., gt=0, le=85.0)
+    points: float = Field(default=0.0, ge=0, le=20.0)  # Max: 20pts
 
 class PlayerUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=2, max_length=100)
     team_id: Optional[int] = None
     role: Optional[Literal["Duelist", "Initiator", "Controller", "Sentinel", "Flex"]] = None
-    current_price: Optional[float] = Field(None, gt=0)
-    points: Optional[float] = Field(None, ge=0)
+    current_price: Optional[float] = Field(None, gt=0, le=85.0)  # Cap: 85M
+    points: Optional[float] = Field(None, ge=0, le=20.0)  # Max: 20pts
     photo_url: Optional[str] = None
 
 # ============================================================================

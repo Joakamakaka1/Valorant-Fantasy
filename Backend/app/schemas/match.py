@@ -39,14 +39,14 @@ class PlayerMatchStatsCreate(BaseModel):
     first_kills: int = Field(0, ge=0)
     first_deaths: int = Field(0, ge=0)
     clutches_won: int = Field(0, ge=0)
-    fantasy_points_earned: float = Field(0.0)
+    fantasy_points_earned: float = Field(0.0, ge=0, le=20.0)  # Max: 20pts
 
 class PlayerMatchStatsUpdate(BaseModel):
     kills: Optional[int] = Field(None, ge=0)
     death: Optional[int] = Field(None, ge=0)
     assists: Optional[int] = Field(None, ge=0)
     rating: Optional[float] = Field(None, ge=0)
-    fantasy_points_earned: Optional[float] = None
+    fantasy_points_earned: Optional[float] = Field(None, ge=0, le=20.0)  # Max: 20pts
 
 # ============================================================================
 # SCHEMAS BÁSICOS (sin relaciones) - Para usar dentro de otros schemas

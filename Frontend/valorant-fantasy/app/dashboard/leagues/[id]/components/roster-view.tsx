@@ -30,11 +30,41 @@ import {
   ArrowUpDown,
   ChevronDown,
   ChevronUp,
+  X,
 } from "lucide-react";
 import { LeagueMember, RosterEntry, Player } from "@/lib/types";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { leaguesApi } from "@/lib/api";
+
+// Role colors matching the trading card aesthetic
+const ROLE_STYLES = {
+  Duelist: {
+    gradient: "from-red-500/30 via-zinc-900/50 to-zinc-900",
+    border: "border-t-red-500/50",
+    text: "text-red-400",
+  },
+  Controller: {
+    gradient: "from-purple-500/30 via-zinc-900/50 to-zinc-900",
+    border: "border-t-purple-500/50",
+    text: "text-purple-400",
+  },
+  Initiator: {
+    gradient: "from-amber-500/30 via-zinc-900/50 to-zinc-900",
+    border: "border-t-amber-500/50",
+    text: "text-amber-400",
+  },
+  Sentinel: {
+    gradient: "from-blue-500/30 via-zinc-900/50 to-zinc-900",
+    border: "border-t-blue-500/50",
+    text: "text-blue-400",
+  },
+  Flex: {
+    gradient: "from-emerald-500/30 via-zinc-900/50 to-zinc-900",
+    border: "border-t-emerald-500/50",
+    text: "text-emerald-400",
+  },
+};
 
 interface RosterViewProps {
   member: LeagueMember;
@@ -206,65 +236,124 @@ export function RosterView({ member, roster, allPlayers }: RosterViewProps) {
               className="bg-zinc-900/40 border-zinc-800 relative overflow-hidden group min-h-[160px] hover:border-[#ff4655]/30 transition-all backdrop-blur-sm flex flex-col p-0 h-full"
             >
               {slotData ? (
-                // FILLED SLOT
-                <div className="p-4 flex flex-1 flex-col bg-gradient-to-t from-zinc-950/50 to-transparent h-full">
-                  <div className="flex justify-between items-start">
-                    <div className="bg-[#ff4655] text-white text-[8px] font-black uppercase px-2 py-0.5 rounded shadow-[0_2px_10px_rgba(255,70,85,0.4)]">
-                      {slot.label}
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-6 text-zinc-600 hover:text-red-500 hover:bg-red-500/10 rounded-full"
-                      onClick={() =>
-                        confirmReleasePlayer(
-                          slotData.entry.id,
-                          slotData.player?.name || "Player",
-                        )
-                      }
-                      disabled={isProcessing}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  </div>
-                  <div className="flex flex-1 flex-col items-center justify-center min-h-0 py-4">
-                    <div className="size-16 rounded-full bg-zinc-800 flex items-center justify-center mb-2 border-2 border-zinc-700 group-hover:border-[#ff4655]/50 transition-colors shadow-inner overflow-hidden relative">
-                      {slotData.player?.team?.logo_url ? (
-                        <img
-                          src={slotData.player.team.logo_url}
-                          alt={slotData.player.team.name}
-                          className="size-full object-cover opacity-40 absolute inset-0"
+                // FILLED SLOT - Trading Card Design
+                (() => {
+                  const roleStyle =
+                    ROLE_STYLES[
+                      slotData.player?.role as keyof typeof ROLE_STYLES
+                    ] || ROLE_STYLES.Flex;
+                  return (
+                    <div className="p-0 flex flex-1 flex-col h-full">
+                      {/* Role Badge - Top with corner decorations */}
+                      <div className="relative border-b-2 border-zinc-800/50">
+                        <div
+                          className={`absolute inset-0 bg-gradient-to-b ${roleStyle.gradient} opacity-60`}
                         />
-                      ) : null}
-                      <UserIcon className="size-8 text-zinc-500 relative z-10" />
+                        <div className="relative px-3 py-2 flex items-center justify-between">
+                          {/* Left corner decoration */}
+                          <div
+                            className={`w-3 h-0.5 ${roleStyle.border.replace("border-t-", "bg-")}`}
+                          />
+
+                          <p
+                            className={`text-[12px] font-black uppercase tracking-widest ${roleStyle.text}`}
+                          >
+                            {slotData.player?.role}
+                          </p>
+
+                          {/* Right corner decoration */}
+                          <div
+                            className={`w-3 h-0.5 ${roleStyle.border.replace("border-t-", "bg-")}`}
+                          />
+                        </div>
+                        {/* Trash button in top-right corner */}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="absolute top-1 right-1 size-6 text-zinc-600 hover:text-red-500 hover:bg-red-500/10 rounded-full z-10"
+                          onClick={() =>
+                            confirmReleasePlayer(
+                              slotData.entry.id,
+                              slotData.player?.name || "Player",
+                            )
+                          }
+                          disabled={isProcessing}
+                        >
+                          <X className="size-4.5" />
+                        </Button>
+                      </div>
+
+                      {/* Player Image Section */}
+                      <div
+                        className={`relative h-60 bg-gradient-to-b ${roleStyle.gradient} flex items-center justify-center overflow-hidden`}
+                      >
+                        {/* Player Image */}
+                        <img
+                          src={
+                            slotData.player?.photo_url
+                              ? `/api/proxy/image?url=${encodeURIComponent(slotData.player.photo_url)}`
+                              : "/fondo_overview.jpg"
+                          }
+                          alt={slotData.player?.name}
+                          className="absolute inset-0 w-full h-full object-cover z-0"
+                        />
+
+                        {/* Team Logo Watermark */}
+                        {slotData.player?.team?.logo_url && (
+                          <div className="absolute bottom-2 right-2 size-7 rounded bg-zinc-900/80 border border-zinc-800 p-1 backdrop-blur-sm z-20">
+                            <img
+                              src={slotData.player.team.logo_url}
+                              alt={slotData.player.team.name}
+                              className="size-full object-contain opacity-60"
+                            />
+                          </div>
+                        )}
+
+                        {/* Price Badge */}
+                        <div className="absolute bottom-0 left-0 right-0 bg-zinc-950/90 backdrop-blur-sm border-t border-zinc-800 py-1.5">
+                          <p className="text-xs font-black text-white italic text-center">
+                            €{slotData.player?.current_price.toFixed(1)}M
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Player Info Section */}
+                      <div className="p-3 bg-zinc-950 flex-1 flex flex-col justify-end">
+                        {/* Player Name */}
+                        <h3 className="text-[16px] font-black text-white uppercase italic leading-tight mb-1 truncate">
+                          {slotData.player?.name}
+                        </h3>
+
+                        {/* Team Name */}
+                        <div className="flex items-center gap-1 mb-2">
+                          <p className="text-[10px] text-zinc-500 font-bold uppercase truncate flex-1">
+                            {slotData.player?.team?.name || "Independent"}
+                          </p>
+                        </div>
+
+                        {/* Stats */}
+                        <div className="flex items-center justify-between text-[10px]">
+                          <div className="flex flex-col">
+                            <span className="text-zinc-500 font-black uppercase mb-0.5">
+                              Points
+                            </span>
+                            <span className="text-[14px] text-emerald-400 font-black italic">
+                              {slotData.player?.points.toFixed(1)}
+                            </span>
+                          </div>
+                          <div className="flex flex-col items-end">
+                            <span className="text-zinc-500 font-black uppercase mb-0.5">
+                              Matches
+                            </span>
+                            <span className="text-[14px] text-white font-black italic">
+                              {slotData.player?.matches_played}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <span className="font-black text-white uppercase italic text-center leading-tight tracking-tight text-sm">
-                      {slotData.player?.name}
-                    </span>
-                    <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
-                      {slotData.player?.team?.name || "Independent"} •{" "}
-                      {slotData.player?.region}
-                    </span>
-                  </div>
-                  <div className="mt-auto flex justify-between w-full border-t border-zinc-800/50 pt-2 bg-zinc-950/30 p-2 rounded-lg">
-                    <div className="flex flex-col">
-                      <span className="text-[7px] text-zinc-500 uppercase font-black">
-                        Points
-                      </span>
-                      <span className="text-xs font-black text-emerald-400 italic">
-                        {slotData.player?.points}
-                      </span>
-                    </div>
-                    <div className="flex flex-col items-end">
-                      <span className="text-[7px] text-zinc-500 uppercase font-black">
-                        Contract
-                      </span>
-                      <span className="text-xs font-black text-white italic">
-                        €{slotData.player?.current_price}M
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                  );
+                })()
               ) : (
                 // EMPTY SLOT - SCOUT BUTTON
                 <Dialog

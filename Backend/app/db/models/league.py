@@ -21,7 +21,7 @@ class League(Base):
     status = Column(Enum(LeagueStatus), default=LeagueStatus.DRAFTING)
 
     admin_user = relationship("User", back_populates="created_leagues")
-    members = relationship("LeagueMember", back_populates="members_league")
+    members = relationship("LeagueMember", back_populates="league")
 
     # Fix relationship back_populates names to match LeagueMember
     
@@ -32,14 +32,14 @@ class LeagueMember(Base):
     league_id = Column(Integer, ForeignKey("leagues.id"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     team_name = Column(String(255), nullable=False)
-    budget = Column(Float, default=100.0)
+    budget = Column(Float, default=50.0)  # Budget inicial: 50M (antes: 100M)
     selected_team_id = Column(Integer, ForeignKey("teams.id"), nullable=True)  # Equipo profesional elegido
     total_points = Column(Float, default=0.0)  # Puntos totales acumulados en la liga
     is_admin = Column(Boolean, default=False)
     joined_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
-    members_league = relationship("League", back_populates="members") 
+    league = relationship("League", back_populates="members") 
     user = relationship("User", back_populates="leagues", lazy="joined")
     roster = relationship("Roster", back_populates="league_member")
     selected_team = relationship("Team", foreign_keys=[selected_team_id])  # Relación con Team

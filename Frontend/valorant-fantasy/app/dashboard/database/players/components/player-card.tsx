@@ -72,7 +72,7 @@ export function PlayerCard({ player, onClick }: PlayerCardProps) {
 
         {/* Player Image Section */}
         <div
-          className={`relative h-40 bg-gradient-to-b ${roleStyle.gradient} flex items-center justify-center overflow-hidden`}
+          className={`relative h-70 bg-gradient-to-b ${roleStyle.gradient} flex items-center justify-center overflow-hidden`}
         >
           {/* Player Image */}
           <img

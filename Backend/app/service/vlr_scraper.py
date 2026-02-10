@@ -530,3 +530,152 @@ class VLRScraper:
         except Exception as e:
             logger.error(f"Error fetching match URLs from {event_path}: {e}")
             return []
+
+
+    @async_retry_with_backoff(max_retries=3, base_delay=2.0)
+    async def scrape_events_page(self) -> List[Dict[str, Any]]:
+        """
+        Scrapea https://www.vlr.gg/events/?tier=60 para obtener estado de torneos VCT.
+        
+        Returns:
+            List[Dict]: [
+                {
+                    "name": "Valorant Masters Santiago 2026",
+                    "vlr_event_id": 2760,
+                    "vlr_event_path": "/event/2760/valorant-masters-santiago-2026",
+                    "status": "upcoming" | "ongoing" | "completed",
+                    "dates": "Feb 28–Mar 16"
+                }
+            ]
+        """
+        url = "https://www.vlr.gg/events/?tier=60"
+        logger.info(f"🔍 Scraping events page: {url}")
+        
+        html = await self._fetch_with_retry(url)
+        soup = BeautifulSoup(html, 'html.parser')
+        
+        events = []
+        
+        # Filtrar torneos VCT principales:
+        # - Kickoff 2026: 2682 (Americas), 2684 (EMEA), 2683 (Pacific), 2685 (China)
+        # - Masters Santiago 2026: 2760
+        # - Masters London 2026: 2765
+        # - Champions 2026: 2766
+        TARGET_EVENT_IDS = {2682, 2683, 2684, 2685, 2760, 2765, 2766}
+        
+        # VLR.gg organiza eventos en secciones: UPCOMING, ONGOING, COMPLETED
+        # Buscar todas las secciones de eventos
+        for section in soup.find_all('div', class_='events-container-col'):
+            # Determinar el status de la sección desde el header
+            status_header = section.find('div', class_='wf-label')
+            if not status_header:
+                continue
+            
+            status_text = status_header.text.strip().lower()
+            
+            # Mapear texto a status
+            if 'upcoming' in status_text:
+                status = 'UPCOMING'  # Uppercase for enum
+            elif 'ongoing' in status_text:
+                status = 'ONGOING'   # Uppercase for enum
+            else:
+                status = 'COMPLETED' # Uppercase for enum
+            
+            # Extraer eventos de esta sección
+            for event_card in section.find_all('a', class_='event-item'):
+                try:
+                    # Nombre del evento
+                    title_elem = event_card.find('div', class_='event-item-title')
+                    if not title_elem:
+                        continue
+                    
+                    event_name = title_elem.text.strip()
+                    
+                    # Extraer ID del evento desde href: /event/2760/...
+                    href = event_card.get('href', '')
+                    event_id_match = re.search(r'/event/(\d+)/', href)
+                    if not event_id_match:
+                        continue
+                    
+                    event_id = int(event_id_match.group(1))
+                    
+                    # Solo incluir los 3 torneos principales
+                    if event_id not in TARGET_EVENT_IDS:
+                        continue
+                    
+                    # Extraer fechas
+                    dates_elem = event_card.find('div', class_='event-item-desc-item-value')
+                    dates = dates_elem.text.strip() if dates_elem else "TBD"
+                    
+                    events.append({
+                        "name": event_name,
+                        "vlr_event_id": event_id,
+                        "vlr_event_path": href,
+                        "status": status,  # Already uppercase from mapping above
+                        "dates": dates
+                    })
+                    
+                    logger.info(f"  📅 {event_name} ({event_id}): {status}")
+                
+                except Exception as e:
+                    logger.warning(f"Error parsing event card: {e}")
+                    continue
+        
+        logger.info(f"✅ Scraped {len(events)} tournaments from events page")
+        return events
+    
+    @async_retry_with_backoff(max_retries=3, base_delay=2.0)
+    async def scrape_tournament_teams(self, event_path: str) -> List[str]:
+        """
+        Scrapea la página Overview de un torneo para obtener equipos participantes.
+        
+        Example: https://www.vlr.gg/event/2760/valorant-masters-santiago-2026
+        
+        Args:
+            event_path: Path del evento (e.g., "/event/2760/valorant-masters-santiago-2026")
+        
+        Returns:
+            List[str]: ["Team Liquid", "Fnatic", "Sentinels", "Leviatán", ...]
+        """
+        # Asegurarse de que la URL apunta a la página Overview (no /matches)
+        if '/matches' in event_path:
+            event_path = event_path.split('/matches')[0]
+        
+        url = f"https://www.vlr.gg{event_path}"
+        logger.info(f"🔍 Scraping tournament teams from: {url}")
+        
+        html = await self._fetch_with_retry(url)
+        soup = BeautifulSoup(html, 'html.parser')
+        
+        teams = set()  # Usar set para evitar duplicados
+        
+        # Los equipos aparecen en la sección de bracket/participants
+        # Buscar todos los elementos con nombre de equipo
+        
+        # Método 1: Buscar en el bracket
+        for team_elem in soup.find_all('div', class_='event-team-name'):
+            team_name = team_elem.text.strip()
+            if team_name:
+                teams.add(team_name)
+        
+        # Método 2: Buscar en la lista de participantes (si existe)
+        for team_link in soup.find_all('a', class_='event-team'):
+            team_name_elem = team_link.find('div', class_='event-team-name')
+            if team_name_elem:
+                team_name = team_name_elem.text.strip()
+                if team_name:
+                    teams.add(team_name)
+        
+        # Método 3: Buscar divs con wf-title (teams in groups)
+        for group_section in soup.find_all('div', class_='event-group'):
+            for team_div in group_section.find_all('div', class_='wf-title'):
+                # Verificar que no sea un header de grupo
+                if 'group' not in team_div.text.lower():
+                    team_name = team_div.text.strip()
+                    if team_name and len(team_name) > 2:  # Filtrar nombres muy cortos
+                        teams.add(team_name)
+        
+        teams_list = sorted(list(teams))
+        logger.info(f"✅ Found {len(teams_list)} teams: {', '.join(teams_list[:5])}{'...' if len(teams_list) > 5 else ''}")
+        
+        return teams_list

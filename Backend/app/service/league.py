@@ -1,8 +1,9 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload, selectinload
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from app.db.models.league import League, LeagueMember, Roster
+from app.db.models.professional import Player
 from app.core.exceptions import AppError
 from app.core.constants import ErrorCode
 from app.core.decorators import transactional
@@ -57,7 +58,7 @@ class LeagueService:
             league_id=created_league.id, 
             user_id=admin_user_id,
             team_name=f"Equipo de {name}", 
-            budget=200.0, 
+            budget=50.0, 
             is_admin=True
         )
         await member_repo.create(member)
@@ -126,6 +127,308 @@ class LeagueMemberService:
         )
         
         return await self.repo.create(member, options=[joinedload(LeagueMember.user)])
+    
+    @transactional
+    async def create_member_with_draft(
+        self, 
+        league_id: int, 
+        user_id: int, 
+        team_name: str,
+        selected_team_id: Optional[int] = None
+    ) -> LeagueMember:
+        """
+        Crea un miembro de liga y le asigna 11 jugadores aleatorios con balance de roles.
+        
+        Proceso:
+        1. Validar que la liga existe y no está llena
+        2. Validar que el usuario no es ya miembro
+        3. Crear LeagueMember con budget=50.0
+        4. Obtener pool de jugadores disponibles
+        5. Asignar 11 jugadores aleatorios (valor: 185-210M)
+           - 2 Duelists, 2 Initiators, 2 Controllers, 2 Sentinels, 3 Flex
+        6. Crear Roster entries
+        """
+        import random
+        from app.db.models.professional import Player
+        from app.core.logging_config import logger
+        
+        # 1. Validar liga
+        league = await self.league_repo.get(league_id)
+        if not league:
+            raise AppError(404, ErrorCode.NOT_FOUND, "La liga no existe")
+        
+        # 2. Validar que usuario no es ya miembro
+        if await self.repo.get_by_league_and_user(league_id, user_id):
+            raise AppError(409, ErrorCode.ALREADY_IN_LEAGUE, "Ya eres miembro de esta liga")
+        
+        # 3. Validar que la liga no está llena
+        current_members = await self.repo.get_by_league(league_id)
+        if len(current_members) >= league.max_teams:
+            raise AppError(400, ErrorCode.LEAGUE_FULL, "La liga está llena")
+        
+        # 4. Crear LeagueMember
+        member = LeagueMember(
+            league_id=league_id,
+            user_id=user_id,
+            team_name=team_name,
+            selected_team_id=selected_team_id,
+            budget=50.0,  # Budget inicial: 50M
+            total_points=0.0,
+            is_admin=False
+        )
+        self.db.add(member)
+        await self.db.flush()  # Para obtener member.id
+        
+        # 5. Obtener pool de jugadores disponibles
+        query = select(Player).where(
+            Player.current_price > 0,
+            Player.matches_played > 0
+        )
+        result = await self.db.execute(query)
+        available_players = list(result.scalars().all())
+        
+        if len(available_players) < 11:
+            raise AppError(
+                500, 
+                ErrorCode.INTERNAL_ERROR, 
+                f"No hay suficientes jugadores para draft (encontrados {len(available_players)})"
+            )
+        
+        # 6. Ejecutar draft aleatorio con balance de roles
+        starters, bench = await self._assign_random_team_with_roles(
+            available_players, 
+            target_value=197.5  # Rango objetivo: 185-210M
+        )
+        
+        # 7. Crear Roster entries con separación starter/bench y labels únicos
+        total_team_value = 0.0
+        roster_repo = RosterRepository(self.db)
+        
+        # Mapeo de slots del frontend (debe coincidir con roster-view.tsx)
+        SLOT_LABELS = {
+            "Duelist": ["Duelist 1", "Duelist 2"],
+            "Initiator": ["Initiator 1", "Initiator 2"],
+            "Controller": ["Controller 1", "Controller 2"],
+            "Sentinel": ["Sentinel 1", "Sentinel 2"],
+            "Flex": ["Bench 1", "Bench 2", "Bench 3"]
+        }
+        
+        # Contador para asignar labels únicos por rol
+        role_counters = {
+            "Duelist": 0,
+            "Initiator": 0,
+            "Controller": 0,
+            "Sentinel": 0,
+            "Flex": 0
+        }
+        
+        # Crear entries para STARTERS (8 jugadores con roles específicos)
+        for player in starters:
+            role = player.role
+            label = SLOT_LABELS[role][role_counters[role]]
+            role_counters[role] += 1
+            
+            roster_entry = Roster(
+                league_member_id=member.id,
+                player_id=player.id,
+                is_starter=True,
+                is_bench=False,
+                role_position=label,  # Asignar label único: "Duelist 1", "Duelist 2", etc.
+                total_value_team=0.0
+            )
+            self.db.add(roster_entry)
+            total_team_value += player.current_price
+        
+        # Crear entries para BENCH (3 jugadores Flex)
+        for player in bench:
+            label = SLOT_LABELS["Flex"][role_counters["Flex"]]
+            role_counters["Flex"] += 1
+            
+            roster_entry = Roster(
+                league_member_id=member.id,
+                player_id=player.id,
+                is_starter=False,
+                is_bench=True,
+                role_position=label,  # Asignar label: "Bench 1", "Bench 2", "Bench 3"
+                total_value_team=0.0
+            )
+            self.db.add(roster_entry)
+            total_team_value += player.current_price
+        
+        logger.info(
+            f"Draft completado para '{team_name}': 8 titulares + 3 suplentes, "
+            f"{total_team_value:.2f}M valor, 50M budget"
+        )
+        
+        # Refrescar member para incluir relaciones
+        await self.db.refresh(member, ["user"])
+        return member
+    
+    async def _assign_random_team_with_roles(
+        self,
+        available_players: List[Player],
+        target_value: float = 197.5
+    ) -> Tuple[List[Player], List[Player]]:
+        """
+        Asigna 11 jugadores con balance de roles:
+        
+        STARTERS (8 jugadores):
+        - 2 Duelists
+        - 2 Initiators
+        - 2 Controllers
+        - 2 Sentinels
+        
+        BENCH (3 jugadores):
+        - 3 Flex (cualquier rol)
+        
+        Valor total: 185-210M
+        
+        Returns:
+            Tuple[starters, bench] donde starters son 8 jugadores y bench son 3
+        """
+        import random
+        from app.core.logging_config import logger
+        
+        MAX_ITERATIONS = 100
+        
+        # Clasificar jugadores por rol Y precio
+        players_by_role = {
+            "Duelist": [p for p in available_players if p.role == "Duelist"],
+            "Initiator": [p for p in available_players if p.role == "Initiator"],
+            "Controller": [p for p in available_players if p.role == "Controller"],
+            "Sentinel": [p for p in available_players if p.role == "Sentinel"],
+        }
+        
+        for attempt in range(MAX_ITERATIONS):
+            starters = []
+            bench = []
+            total_value = 0.0
+            
+            try:
+                # PASO 1: Seleccionar 2 de cada rol (8 STARTERS)
+                for role, count in [("Duelist", 2), ("Initiator", 2), ("Controller", 2), ("Sentinel", 2)]:
+                    role_pool = players_by_role.get(role, [])
+                    if len(role_pool) < count:
+                        # No hay suficientes jugadores de este rol, saltar iteración
+                        raise ValueError(f"No hay suficientes {role}")
+                    
+                    # Ordenar por precio y tomar mix de caros/baratos
+                    role_pool_sorted = sorted(role_pool, key=lambda p: p.current_price, reverse=True)
+                    
+                    # Seleccionar 2: 1 del top 30% y 1 aleatorio del resto
+                    top_30_percent = max(1, len(role_pool_sorted) // 3)
+                    
+                    # Primer jugador del top
+                    pick1 = random.choice(role_pool_sorted[:top_30_percent])
+                    starters.append(pick1)
+                    total_value += pick1.current_price
+                    
+                    # Segundo jugador del resto (excluyendo el ya elegido)
+                    remaining = [p for p in role_pool if p.id != pick1.id]
+                    if remaining:
+                        pick2 = random.choice(remaining)
+                        starters.append(pick2)
+                        total_value += pick2.current_price
+                
+                # PASO 2: Seleccionar 3 FLEX para BENCH (cualquier rol, priorizando acercarse al target)
+                remaining_pool = [p for p in available_players if p not in starters]
+                if len(remaining_pool) < 3:
+                    raise ValueError("No hay suficientes jugadores para bench")
+                
+                # Calcular cuánto presupuesto queda para los 3 flex
+                remaining_budget = target_value - total_value
+                target_per_flex = remaining_budget / 3
+                
+                # Ordenar por cercanía al target_per_flex
+                remaining_sorted = sorted(
+                    remaining_pool,
+                    key=lambda p: abs(p.current_price - target_per_flex)
+                )
+                
+                # Tomar los 3 mejores matches para bench
+                for i in range(3):
+                    if i < len(remaining_sorted):
+                        bench.append(remaining_sorted[i])
+                        total_value += remaining_sorted[i].current_price
+                
+                # PASO 3: Validar restricciones (rango 185-210M)
+                if len(starters) == 8 and len(bench) == 3 and 185.0 <= total_value <= 210.0:
+                    logger.debug(
+                        f"Equipo ensamblado en {attempt+1} intentos: {total_value:.2f}M, "
+                        f"8 starters + 3 bench"
+                    )
+                    return (starters, bench)
+            
+            except ValueError:
+                # No se pudo con esta combinación, intentar de nuevo
+                continue
+        
+        # FALLBACK: Estrategia greedy sin balance de roles
+        logger.warning(f"No se pudo ensamblar con balance de roles en {MAX_ITERATIONS} intentos. Usando fallback.")
+        return await self._greedy_team_assembly(available_players, target_value)
+    
+    async def _greedy_team_assembly(
+        self, 
+        available_players: List[Player], 
+        target_value: float
+    ) -> Tuple[List[Player], List[Player]]:
+        """
+        Estrategia greedy de fallback sin balance de roles.
+        Retorna: (starters, bench) donde starters son los primeros 8 y bench los últimos 3.
+        """
+        import random
+        from app.core.logging_config import logger
+        
+        sorted_players = sorted(available_players, key=lambda p: p.current_price, reverse=True)
+        
+        selected = []
+        total_value = 0.0
+        
+        # 1. Tomar 1-2 jugadores TOP (>= 45M) máximo
+        top_count = 0
+        max_tops = random.choice([1, 2])  # Aleatorio entre 1 y 2 tops
+        
+        for player in sorted_players[:]:
+            if player.current_price >= 45.0 and top_count < max_tops:
+                selected.append(player)
+                total_value += player.current_price
+                sorted_players = [p for p in sorted_players if p.id != player.id]
+                top_count += 1
+                if top_count >= max_tops:
+                    break
+        
+        # 2. Llenar por cercanía al promedio objetivo
+        remaining_slots = 11 - len(selected)
+        if remaining_slots > 0:
+            target_per_player = (target_value - total_value) / remaining_slots
+            sorted_by_fit = sorted(sorted_players, key=lambda p: abs(p.current_price - target_per_player))
+            
+            for player in sorted_by_fit:
+                if len(selected) >= 11:
+                    break
+                if total_value + player.current_price <= target_value + 15:
+                    selected.append(player)
+                    total_value += player.current_price
+        
+        # 3. Rellenar con baratos si faltan
+        if len(selected) < 11:
+            remaining = [p for p in available_players if p not in selected]
+            remaining_sorted = sorted(remaining, key=lambda p: p.current_price)
+            for player in remaining_sorted:
+                if len(selected) >= 11:
+                    break
+                selected.append(player)
+                total_value += player.current_price
+        
+        logger.info(f"Greedy fallback: {total_value:.2f}M ({len(selected)} jugadores)")
+        
+        # Dividir en starters (primeros 8) y bench (últimos 3)
+        final_team = selected[:11]
+        starters = final_team[:8]
+        bench = final_team[8:11]
+        
+        return (starters, bench)
+
 
     @transactional
     async def update(self, member_id: int, member_data: dict) -> LeagueMember:

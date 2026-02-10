@@ -19,9 +19,13 @@ class Match(Base):
     team_b_id = Column(Integer, ForeignKey("teams.id"), nullable=True, index=True)
     score_team_a = Column(Integer, default=0)
     score_team_b = Column(Integer, default=0)
+    
+    # Tournament association
+    tournament_id = Column(Integer, ForeignKey("tournaments.id", ondelete="SET NULL"), nullable=True, index=True)
 
     team_a = relationship("Team", foreign_keys=[team_a_id])
     team_b = relationship("Team", foreign_keys=[team_b_id])
+    tournament = relationship("Tournament", back_populates="matches")
     player_stats = relationship("PlayerMatchStats", back_populates="match")
 
     # Performance Indexes

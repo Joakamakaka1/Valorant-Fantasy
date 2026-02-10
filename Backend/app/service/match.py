@@ -221,28 +221,84 @@ class PlayerMatchStatsService:
     async def calculate_fantasy_points(self, stats: PlayerMatchStats, match: Match = None) -> float:
         """
         Calcula los puntos de fantasía para un jugador en un partido específico.
-        Incluye bonificaciones por victoria, sweep, y desempeño individual.
+        
+        NUEVA FÓRMULA V2 (0-20 puntos máx):
+        - Estadísticas base (K/D/A): hasta 8 puntos
+        - Performance (ACS, ADR, Rating): hasta 7 puntos
+        - Clutch & Impact (FK, FD, Clutches): hasta 3 puntos
+        - Resultado del partido (Victoria/Sweep): hasta 2 puntos
         """
         points = 0.0
         
-        # 1. ESTADÍSTICAS INDIVIDUALES
-        points += stats.kills * 0.75
-        points -= stats.death * 0.5
-        points += stats.assists * 0.3
-        points += stats.first_kills * 1.5
-        points -= stats.first_deaths * 1.2
-        points += stats.clutches_won * 3.0
+        # =================================================================
+        # 1. ESTADÍSTICAS BASE (hasta 8 puntos)
+        # =================================================================
+        # K/D Ratio ponderado - enfoque en impacto neto
+        kd_ratio = stats.kills / max(stats.death, 1)
         
-        if stats.adr:
-            points += (stats.adr / 10.0)
-            
-        if stats.rating > 1.10:
-            points += (stats.rating - 1.10) * 10
+        # Kills base: 0.3 por kill (aprox 20 kills = 6 pts)
+        points += stats.kills * 0.30
         
-        # 2. BONUS POR RESULTADO
+        # Penalidad por muertes: -0.25 por death
+        points += stats.death * -0.25
+        
+        # Assists: 0.2 por asistencia (aprox 5 assists = 1 pt)
+        points += stats.assists * 0.20
+        
+        # Bonus si K/D > 2.0 (jugador dominante)
+        if kd_ratio >= 2.0:
+            points += (kd_ratio - 2.0) * 1.5  # Aprox +1-2 pts para K/D muy alto
+        
+        # =================================================================
+        # 2. PERFORMANCE METRICS (hasta 7 puntos)
+        # =================================================================
+        # ACS (Average Combat Score): Indicador clave de impacto
+        if stats.acs >= 300:
+            points += 3.0  # ACS excepcional
+        elif stats.acs >= 250:
+            points += 2.0  # ACS alto
+        elif stats.acs >= 200:
+            points += 1.0  # ACS sólido
+        elif stats.acs >= 150:
+            points += 0.5  # ACS promedio
+        
+        # ADR (Average Damage per Round): Consistencia de daño
+        if stats.adr >= 120:
+            points += 2.0  # ADR elite
+        elif stats.adr >= 100:
+            points += 1.5  # ADR alto
+        elif stats.adr >= 80:
+            points += 1.0  # ADR bueno
+        elif stats.adr >= 60:
+            points += 0.5  # ADR promedio
+        
+        # VLR Rating: Métrica compuesta de VLR
+        if stats.rating >= 1.30:
+            points += 2.5  # Rating excepcional (MVP candidate)
+        elif stats.rating >= 1.15:
+            points += 1.5  # Rating muy bueno
+        elif stats.rating >= 1.00:
+            points += 0.75  # Rating positivo
+        elif stats.rating >= 0.85:
+            points += 0.25  # Rating aceptable
+        # No penalidad por rating bajo (ya se refleja en K/D)
+        
+        # =================================================================
+        # 3. CLUTCH & IMPACT PLAYS (hasta 3 puntos)
+        # =================================================================
+        # First Kills: Iniciar rondas con ventaja es clave
+        points += stats.first_kills * 0.8  # 2-3 FK = 1.6-2.4 pts
+        
+        # First Deaths: Penaliza morir primero (pone en desventaja al equipo)
+        points += stats.first_deaths * -0.6
+        
+        # Clutches Won: Jugadas de altísimo valor
+        points += stats.clutches_won * 1.5  # 1-2 clutches = 1.5-3 pts
+        
+        # =================================================================
+        # 4. BONUS POR RESULTADO (hasta 2 puntos)
+        # =================================================================
         if match and match.status == "completed":
-            # Nota: Import local para evitar circular dependencies si fuera necesario, 
-            # aunque aquí parece que Player es usado solo para la consulta
             from app.db.models.professional import Player
             query = select(Player).where(Player.id == stats.player_id)
             result = await self.db.execute(query)
@@ -251,28 +307,30 @@ class PlayerMatchStatsService:
             if player and player.team_id:
                 won = False
                 is_sweep = False
-                is_close = False
                 
                 s_a = match.score_team_a or 0
                 s_b = match.score_team_b or 0
                 
                 if player.team_id == match.team_a_id:
-                    if s_a > s_b: 
+                    if s_a > s_b:
                         won = True
                         if s_b == 0: is_sweep = True
-                        elif s_a - s_b == 1: is_close = True
                 elif player.team_id == match.team_b_id:
-                    if s_b > s_a: 
+                    if s_b > s_a:
                         won = True
                         if s_a == 0: is_sweep = True
-                        elif s_b - s_a == 1: is_close = True
                 
                 if won:
-                    points += 7.0
-                    if is_sweep: points += 5.0
-                    if is_close: points += 2.0
+                    points += 1.5  # Bonus por victoria
+                    if is_sweep:
+                        points += 0.5  # Bonus adicional por sweep (2-0 o 3-0)
         
-        points = points * 0.35
+        # =================================================================
+        # LIMITACIÓN FINAL: Cap a 20 puntos
+        # =================================================================
+        points = min(points, 20.0)
+        points = max(points, 0.0)  # No permitir puntos negativos
+        
         return round(points, 2)
 
     @transactional

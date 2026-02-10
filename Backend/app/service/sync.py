@@ -387,6 +387,88 @@ class SyncService:
 
     async def sync_kickoff_2026(self):
         return await self.sync_vct_kickoff_comprehensive()
+    
+    async def sync_from_event(self, event_path: str, tournament_id: Optional[int] = None):
+        """
+        Sincronización de partidos desde un evento específico.
+        
+        Args:
+            event_path: Path del evento en VLR.gg (e.g., "/event/2760/valorant-masters-santiago-2026")
+                       El scraper manejará automáticamente si tiene /matches o no.
+            tournament_id: ID del torneo para asociar partidos (opcional)
+        
+        Returns:
+            int: Número de partidos sincronizados
+        """
+        logger.info(f"--- SYNCING EVENT: {event_path} ---")
+        if tournament_id:
+            logger.info(f"  Tournament ID: {tournament_id}")
+        
+        # Obtener URLs de partidos del evento
+        match_urls = await self.scraper.get_match_urls_from_event(event_path)
+        
+        total_synced = 0
+        for match_info in match_urls:
+            match_url = match_info["url"] if isinstance(match_info, dict) else match_info
+            detected_status = match_info.get("status", "unknown") if isinstance(match_info, dict) else "unknown"
+            
+            # Throttling
+            logger.info(f"Throttling: Waiting {settings.SCRAPER_THROTTLE_SECONDS}s...")
+            await asyncio.sleep(settings.SCRAPER_THROTTLE_SECONDS)
+            
+            parts = [p for p in match_url.split("/") if p]
+            if not parts: continue
+            vlr_id = parts[1] if parts[0] == "match" else parts[0]
+            if not vlr_id.isdigit(): continue
+            
+            # Verificar si ya tenemos este partido procesado
+            existing_match = await self.match_service.repo.get_by_vlr_match_id(vlr_id)
+            
+            # Solo saltar si está completed Y processed
+            if existing_match and existing_match.is_processed and existing_match.status == "completed":
+                logger.debug(f"Match {vlr_id} already processed and completed, skipping")
+                continue
+            
+            # Si es live, siempre actualizar
+            if existing_match and existing_match.status == "live":
+                logger.info(f"Updating LIVE match {vlr_id} (detected: {detected_status})")
+            elif existing_match and detected_status == "live":
+                logger.info(f"Match {vlr_id} is now LIVE (was {existing_match.status})")
+            
+            details = await self.scraper.scrape_match_details(match_url)
+            if not details: continue
+            
+            # Procesar el partido
+            try:
+                old_status = existing_match.status if existing_match else None
+                
+                # Inyectar tournament_id en details si está presente
+                if tournament_id:
+                    details["tournament_id"] = tournament_id
+                
+                # Crear event dict para mantener compatibilidad con _sync_match_details
+                event = {"name": "Tournament Match", "path": event_path}
+                
+                await self._sync_match_details(vlr_id, event, details, existing_match)
+                total_synced += 1
+                
+                # Invalidar caché si necesario
+                has_stats = any(p["kills"] > 0 or p["rating"] > 0 for p in details["players"])
+                new_status = "completed" if has_stats else "upcoming"
+                
+                if old_status != "completed" and new_status == "completed":
+                    if self.redis:
+                        m = await self.match_service.repo.get_by_vlr_match_id(vlr_id)
+                        if m:
+                            await self.redis.delete(f"stats:match:{m.id}")
+                            logger.info(f"Cache invalidated for match {m.id}")
+            
+            except Exception as e:
+                logger.error(f"Error syncing match {vlr_id}: {e}")
+                continue
+        
+        logger.info(f"--- EVENT SYNC COMPLETE. Matches processed: {total_synced} ---")
+        return total_synced
 
     async def update_player_global_stats(self, match: Match):
         """Actualiza los puntos totales y precios (Asíncrono) recalculando desde la base de datos."""
@@ -460,42 +542,110 @@ class SyncService:
         self.db.add(history)
 
     def calculate_new_price(self, player_stats_history: list) -> float:
-        """Calcula el nuevo precio (Operación síncrona sobre datos ya cargados)"""
-        if not player_stats_history:
-            return 10.0
+        """
+        Calcula el nuevo precio de un jugador (0-85M máx).
         
-        # Necesitamos que el historial tenga las fechas cargadas o se asuma orden
-        recent_stats = sorted(player_stats_history, key=lambda x: x.match.date if x.match and x.match.date else datetime.min, reverse=True)[:5]
+        NUEVA FÓRMULA V2:
+        - Performance reciente (últimos 5 partidos): 60% peso
+        - Consistencia (desviación estándar): 20% peso
+        - Tendencia/Momentum (últimos 2 vs 3-5): 10% peso
+        - Participación (penaliza jugadores con pocos partidos): 10% peso
+        """
+        if not player_stats_history:
+            return 10.0  # Precio inicial para jugadores nuevos
+        
+        # Ordenar por fecha (más recientes primero)
+        recent_stats = sorted(
+            player_stats_history,
+            key=lambda x: x.match.date if x.match and x.match.date else datetime.min,
+            reverse=True
+        )[:5]  # Últimos 5 partidos
         
         if not recent_stats:
             return 10.0
-            
+        
+        # =================================================================
+        # 1. PERFORMANCE RECIENTE (60% del peso)
+        # =================================================================
         points = [s.fantasy_points_earned for s in recent_stats]
         avg_points = sum(points) / len(points)
-        match_count = len(player_stats_history)
         
+        # Base de precio: 5M + (avg_points * 2.5)
+        # Ejemplo: 10 pts promedio = 5 + 25 = 30M
+        # Ejemplo: 15 pts promedio = 5 + 37.5 = 42.5M
+        base_price = 5.0 + (avg_points * 2.5)
+        
+        # =================================================================
+        # 2. CONSISTENCIA (20% del peso)
+        # =================================================================
         if len(points) > 1:
             variance = sum((x - avg_points) ** 2 for x in points) / (len(points) - 1)
             std_dev = variance ** 0.5
         else:
             std_dev = 0.0
-            
+        
+        # Coefficient of Variation: menor CV = más consistente
         safe_avg = max(1.0, avg_points)
         cv = std_dev / safe_avg
-        consistency_factor = 1.0 / (1.0 + cv)
         
-        performance_booster = 1.0
-        if avg_points > 15.0:
-            performance_booster = 1.1 + ((avg_points - 15.0) / 100.0)
+        # Factor de consistencia: 0.85 a 1.20
+        if cv < 0.15:
+            consistency_multiplier = 1.20  # Muy consistente
+        elif cv < 0.25:
+            consistency_multiplier = 1.10
+        elif cv < 0.40:
+            consistency_multiplier = 1.00
+        elif cv < 0.55:
+            consistency_multiplier = 0.95
+        else:
+            consistency_multiplier = 0.85  # Muy inconsistente
+        
+        # =================================================================
+        # 3. TENDENCIA / MOMENTUM (10% del peso)
+        # =================================================================
+        trend_multiplier = 1.0
+        if len(points) >= 3:
+            # Comparar promedio de últimos 2 partidos vs promedio de partidos 3-5
+            recent_avg = sum(points[:2]) / 2
+            older_avg = sum(points[2:]) / len(points[2:])
             
-        if match_count == 1: participation_factor = 0.5
-        elif match_count == 2: participation_factor = 0.7
-        elif match_count == 3: participation_factor = 0.85
-        elif match_count == 4: participation_factor = 0.95
-        else: participation_factor = 1.0
-            
-        raw_price = 5.0 + (avg_points * 2.2) * consistency_factor * participation_factor * performance_booster
-        final_price = max(1.0, min(60.0, raw_price))
+            if recent_avg > older_avg * 1.3:
+                trend_multiplier = 1.12  # +12% jugador en racha ascendente
+            elif recent_avg > older_avg * 1.1:
+                trend_multiplier = 1.05  # +5% mejorando
+            elif recent_avg < older_avg * 0.7:
+                trend_multiplier = 0.90  # -10% jugador en declive
+            elif recent_avg < older_avg * 0.9:
+                trend_multiplier = 0.97  # -3% empeorando
+        
+        # =================================================================
+        # 4. FACTOR DE PARTICIPACIÓN (10% peso)
+        # =================================================================
+        total_matches = len(player_stats_history)
+        if total_matches == 1:
+            participation_factor = 0.50  # -50% para 1 solo partido (muy volátil)
+        elif total_matches == 2:
+            participation_factor = 0.70  # -30% para 2 partidos
+        elif total_matches == 3:
+            participation_factor = 0.85  # -15% para 3 partidos
+        elif total_matches == 4:
+            participation_factor = 0.95  # -5% para 4 partidos
+        else:
+            participation_factor = 1.00  # Sin penalización
+        
+        # =================================================================
+        # 5. CÁLCULO FINAL CON CAPS
+        # =================================================================
+        final_price = (
+            base_price
+            * consistency_multiplier
+            * trend_multiplier
+            * participation_factor
+        )
+        
+        # Límites: Mínimo 2M, Máximo 85M
+        final_price = max(2.0, min(85.0, final_price))
+        
         return round(final_price, 2)
 
     @transactional

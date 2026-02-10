@@ -53,7 +53,7 @@ class LeagueMemberRepository(BaseRepository[LeagueMember]):
         query = (
             select(LeagueMember)
             .options(
-                joinedload(LeagueMember.members_league),
+                joinedload(LeagueMember.league),
                 joinedload(LeagueMember.user)
             )
             .where(LeagueMember.user_id == user_id)

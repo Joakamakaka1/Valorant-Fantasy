@@ -75,6 +75,10 @@ class TeamService:
     async def get_by_region(self, region: str) -> List[Team]:
         # Filtra equipos por región específica
         return await self.repo.get_by_region(region)
+    
+    async def get_by_name(self, name: str) -> Optional[Team]:
+        """Busca un equipo por nombre."""
+        return await self.repo.get_by_name(name)
 
     @transactional
     async def create(self, *, name: str, region: str, logo_url: Optional[str] = None) -> Team:

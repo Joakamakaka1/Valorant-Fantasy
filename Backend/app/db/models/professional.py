@@ -40,8 +40,12 @@ class Player(Base):
     points = Column(Float, default=0.0)
     matches_played = Column(Integer, default=0)
     photo_url = Column(String(512), nullable=True)  # Player photo from Liquipedia
+    
+    # Tournament activation
+    current_tournament_id = Column(Integer, ForeignKey("tournaments.id", ondelete="SET NULL"), nullable=True, index=True)
 
     team = relationship("Team", back_populates="players")
+    current_tournament = relationship("Tournament", foreign_keys=[current_tournament_id])
     price_history = relationship("PriceHistoryPlayer", back_populates="player")
     match_stats = relationship("PlayerMatchStats", back_populates="player")
     roster_entries = relationship("Roster", back_populates="player")
