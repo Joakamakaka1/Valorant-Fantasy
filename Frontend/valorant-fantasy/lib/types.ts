@@ -110,6 +110,7 @@ export interface Player {
   role: PlayerRole;
   region: Region;
   team_id: number | null;
+  current_tournament_id: number | null; // Tournament activation status
   current_price: number;
   base_price: number;
   points: number;
@@ -137,6 +138,7 @@ export interface Match {
   date: string | null;
   status: MatchStatus;
   tournament_name: string | null;
+  tournament_id: number | null; // Tournament ID for filtering
   stage: string | null;
   vlr_url: string | null;
   is_processed: boolean;
@@ -168,6 +170,25 @@ export interface PlayerMatchStats {
   clutches_won: number;
   fantasy_points_earned: number;
   player?: Player;
+}
+
+// ============================================================================
+// TOURNAMENT TYPES
+// ============================================================================
+
+export type TournamentStatus = "UPCOMING" | "ONGOING" | "COMPLETED";
+
+export interface Tournament {
+  id: number;
+  name: string;
+  vlr_event_id: number;
+  vlr_event_path: string;
+  vlr_series_id: number | null;
+  status: TournamentStatus;
+  start_date: string;
+  end_date: string | null;
+  created_at: string;
+  last_scraped_at: string | null;
 }
 
 // ============================================================================

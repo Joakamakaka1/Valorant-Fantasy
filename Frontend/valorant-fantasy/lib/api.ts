@@ -10,6 +10,7 @@ import {
   Player,
   Team,
   Match,
+  Tournament,
   DashboardOverview,
 } from "./types";
 
@@ -195,6 +196,15 @@ export const matchesApi = {
     api.get<any[]>(`/matches/players/${playerId}/stats`, {
       params: { recent },
     }),
+};
+
+export const tournamentsApi = {
+  getAll: (params?: any, config?: import("axios").AxiosRequestConfig) =>
+    api.get<Tournament[]>("/tournaments", { params, ...config }),
+  getOngoing: (config?: import("axios").AxiosRequestConfig) =>
+    api.get<Tournament | null>("/tournaments/ongoing", config),
+  getById: (id: number, config?: import("axios").AxiosRequestConfig) =>
+    api.get<Tournament>(`/tournaments/${id}`, config),
 };
 
 export default api;

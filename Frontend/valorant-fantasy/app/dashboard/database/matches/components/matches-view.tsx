@@ -3,28 +3,64 @@
 import { useState } from "react";
 import { SidebarInset } from "@/components/ui/sidebar";
 import { SiteHeader } from "@/components/site-header";
-import { matchesApi } from "@/lib/api";
+import { matchesApi, tournamentsApi } from "@/lib/api";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQuery } from "@tanstack/react-query";
 import { MatchCard } from "./match-card";
 import { MatchesSkeleton } from "./matches-skeleton";
 import { Button } from "@/components/ui/button";
 import { AlertCircle } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export function MatchesView() {
   const [statusFilter, setStatusFilter] = useState("live");
   const [currentRegion, setCurrentRegion] = useState("ALL");
+  const [tournamentFilter, setTournamentFilter] = useState<string>("all");
 
   const regions = ["ALL", "AMERICAS", "EMEA", "PACIFIC", "CN"];
+
+  // Fetch tournaments
+  const { data: tournaments = [] } = useQuery({
+    queryKey: ["tournaments"],
+    queryFn: () => tournamentsApi.getAll(),
+    staleTime: 1000 * 60 * 10, // 10 minutes cache
+  });
+
+  // Helper to simplify tournament names
+  const simplifyTournamentName = (name: string) => {
+    // Simplify Kickoff tournaments to just "Kickoff 2026"
+    if (name.includes("Kickoff") && name.includes("2026")) {
+      return "Kickoff 2026";
+    }
+    return name;
+  };
+
+  // Check if selected tournament is international (Masters/Champions)
+  const selectedTournament = tournaments.find(
+    (t) => t.id.toString() === tournamentFilter,
+  );
+  const isInternationalTournament =
+    selectedTournament?.name.includes("Masters") ||
+    selectedTournament?.name.includes("Champions");
 
   const {
     data: allMatches = [],
     isLoading,
     isError,
   } = useQuery({
-    queryKey: ["matches"],
+    queryKey: ["matches", tournamentFilter],
     queryFn: async () => {
-      const data = await matchesApi.getAll({ limit: 500 });
+      const params =
+        tournamentFilter !== "all"
+          ? { tournament_id: parseInt(tournamentFilter), limit: 500 }
+          : { limit: 500 };
+      const data = await matchesApi.getAll(params);
       // Sort: Newest first (consistent with backend but reinforced here)
       return data.sort((a, b) => {
         const dateA = a.date ? new Date(a.date).getTime() : 0;
@@ -82,7 +118,8 @@ export function MatchesView() {
         return null;
       })();
 
-      if (currentRegion === "ALL") return true;
+      // Skip region filter for international tournaments (Masters/Champions)
+      if (currentRegion === "ALL" || isInternationalTournament) return true;
       return detectedRegion === currentRegion;
     })
     .sort((a, b) => {
@@ -106,6 +143,47 @@ export function MatchesView() {
           <p className="text-sm sm:text-base text-zinc-400">
             Recent and upcoming matches across all VCT tournaments.
           </p>
+        </div>
+
+        {/* Tournament Filter */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+          <label className="text-sm font-bold text-zinc-400 uppercase tracking-wide">
+            Tournament:
+          </label>
+          <Select value={tournamentFilter} onValueChange={setTournamentFilter}>
+            <SelectTrigger className="w-full sm:w-[300px] bg-zinc-900/40 border-zinc-800 text-white [&>span[data-radix-select-icon]]:hidden">
+              <div className="flex-1 text-left">
+                <SelectValue placeholder="All Tournaments" />
+              </div>
+            </SelectTrigger>
+            <SelectContent className="bg-zinc-900 border-zinc-800">
+              <SelectItem value="all" className="text-white">
+                All Tournaments
+              </SelectItem>
+              {tournaments.map((tournament) => (
+                <SelectItem
+                  key={tournament.id}
+                  value={tournament.id.toString()}
+                  className="text-white"
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`px-2 py-0.5 rounded text-xs font-bold ${
+                        tournament.status === "ONGOING"
+                          ? "bg-green-600"
+                          : tournament.status === "UPCOMING"
+                            ? "bg-blue-600"
+                            : "bg-gray-600"
+                      }`}
+                    >
+                      {tournament.status}
+                    </span>
+                    {simplifyTournamentName(tournament.name)}
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Region Filters */}

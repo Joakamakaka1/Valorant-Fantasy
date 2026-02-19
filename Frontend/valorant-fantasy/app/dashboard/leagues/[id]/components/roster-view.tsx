@@ -36,6 +36,7 @@ import { LeagueMember, RosterEntry, Player } from "@/lib/types";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { leaguesApi } from "@/lib/api";
+import { PlayerActivationBadge } from "@/components/player-activation-badge";
 
 // Role colors matching the trading card aesthetic
 const ROLE_STYLES = {
@@ -309,6 +310,17 @@ export function RosterView({ member, roster, allPlayers }: RosterViewProps) {
                           </div>
                         )}
 
+                        {/* Activation Status Badge */}
+                        <div className="absolute top-2 right-2 z-20">
+                          <PlayerActivationBadge
+                            isActive={
+                              slotData.player?.current_tournament_id !== null
+                            }
+                            variant="icon"
+                            size="sm"
+                          />
+                        </div>
+
                         {/* Price Badge */}
                         <div className="absolute bottom-0 left-0 right-0 bg-zinc-950/90 backdrop-blur-sm border-t border-zinc-800 py-1.5">
                           <p className="text-xs font-black text-white italic text-center">
@@ -421,10 +433,26 @@ export function RosterView({ member, roster, allPlayers }: RosterViewProps) {
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sm:gap-3">
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 mb-0.5 sm:mb-1">
-                                      <div className="w-full font-black text-lg sm:text-base uppercase italic text-white leading-tight sm:truncate">
+                                      <div className="flex-1 font-black text-lg sm:text-base uppercase italic text-white leading-tight truncate">
                                         {player.name}
                                       </div>
+                                      <PlayerActivationBadge
+                                        isActive={
+                                          player.current_tournament_id !== null
+                                        }
+                                        variant="icon"
+                                        size="sm"
+                                      />
                                     </div>
+                                    {player.current_tournament_id === null && (
+                                      <div className="mb-2 text-[10px] bg-amber-600/20 text-amber-400 border border-amber-600/30 rounded px-2 py-1 flex items-center gap-1">
+                                        <AlertTriangle className="size-3" />
+                                        <span className="font-bold">
+                                          Inactive - Won't score in current
+                                          tournament
+                                        </span>
+                                      </div>
+                                    )}
                                     <div className="text-[10px] sm:text-xs text-zinc-500 font-bold uppercase tracking-wider mb-3 sm:mb-2">
                                       {player.team?.name} • {player.region}
                                     </div>

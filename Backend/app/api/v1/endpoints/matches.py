@@ -22,6 +22,7 @@ async def get_all_matches(
     limit: int = Query(100, description="Número máximo de registros a devolver"),
     status_filter: Optional[str] = Query(None, description="Filtrar por estado: upcoming, live, completed"),
     team_id: Optional[int] = Query(None, description="Filtrar por equipo"),
+    tournament_id: Optional[int] = Query(None, description="Filtrar por torneo"),
     unprocessed: bool = Query(False, description="Obtener solo partidos completados sin procesar"),
     recent_days: Optional[int] = Query(None, description="Obtener partidos de los últimos N días"),
     service: MatchService = Depends(get_match_service),
@@ -34,8 +35,9 @@ async def get_all_matches(
     1. unprocessed (si es True)
     2. status_filter
     3. team_id
-    4. recent_days
-    5. paginación estándar (skip, limit)
+    4. tournament_id
+    5. recent_days
+    6. paginación estándar (skip, limit)
     """
     # Delegar la lógica de filtrado al servicio para código más limpio
     matches = await service.get_matches_with_filters(
@@ -43,6 +45,7 @@ async def get_all_matches(
         limit=limit,
         status_filter=status_filter,
         team_id=team_id,
+        tournament_id=tournament_id,
         unprocessed=unprocessed,
         recent_days=recent_days
     )

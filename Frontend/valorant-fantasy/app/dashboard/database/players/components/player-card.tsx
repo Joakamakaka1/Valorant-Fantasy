@@ -2,6 +2,7 @@
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Player } from "@/lib/types";
+import { PlayerActivationBadge } from "@/components/player-activation-badge";
 
 // Role colors matching the trading card aesthetic
 const ROLE_STYLES = {
@@ -95,6 +96,15 @@ export function PlayerCard({ player, onClick }: PlayerCardProps) {
               />
             </div>
           )}
+
+          {/* Activation Status Badge */}
+          <div className="absolute top-2 right-2 z-20">
+            <PlayerActivationBadge
+              isActive={player.current_tournament_id !== null}
+              variant="icon"
+              size="md"
+            />
+          </div>
 
           {/* Price Badge */}
           <div className="absolute bottom-0 left-0 right-0 bg-zinc-950/90 backdrop-blur-sm border-t border-zinc-800 py-2">

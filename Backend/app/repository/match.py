@@ -51,8 +51,8 @@ class MatchRepository(BaseRepository[Match]):
         result = await self.db.execute(query)
         return list(result.scalars().unique().all())
 
-    async def get_by_tournament(self, tournament_name: str) -> List[Match]:
-        query = select(Match).where(Match.tournament_name == tournament_name)
+    async def get_by_tournament(self, tournament_id: int) -> List[Match]:
+        query = select(Match).where(Match.tournament_id == tournament_id).order_by(Match.date.desc())
         result = await self.db.execute(query)
         return list(result.scalars().all())
 

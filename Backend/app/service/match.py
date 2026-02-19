@@ -97,6 +97,7 @@ class MatchService:
         limit: int = 100,
         status_filter: Optional[str] = None,
         team_id: Optional[int] = None,
+        tournament_id: Optional[int] = None,
         unprocessed: bool = False,
         recent_days: Optional[int] = None
     ) -> List[Match]:
@@ -104,7 +105,7 @@ class MatchService:
         Método helper para obtener partidos con filtros múltiples.
         
         Centraliza la lógica de filtrado que antes estaba en el endpoint.
-        Prioridad: unprocessed > status_filter > team_id > recent_days > paginación
+        Prioridad: unprocessed > status_filter > team_id > tournament_id > recent_days > paginación
         """
         if unprocessed:
             return await self.get_unprocessed()
@@ -112,6 +113,8 @@ class MatchService:
             return await self.get_by_status(status_filter)
         if team_id:
             return await self.get_by_team(team_id)
+        if tournament_id:
+            return await self.get_by_tournament(tournament_id)
         if recent_days:
             return await self.get_recent(days=recent_days)
         

@@ -97,6 +97,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             title: "Match Results",
             url: "/dashboard/database/matches",
           },
+          {
+            title: "Tournaments",
+            url: "/dashboard/database/tournaments",
+          },
         ],
       },
     ],
